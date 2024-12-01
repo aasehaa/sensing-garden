@@ -173,6 +173,7 @@ results = model("tcp://127.0.0.1:8888")
 ```python
 sudo apt update # updating raspberrypi - DO THIS ON DEFAULT EVERY TIME YOU INSTALL NEW LIBRARIES
 sudo apt upgrade # upgrading raspberrypi
+reboot
 ```
 
 
