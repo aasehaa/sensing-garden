@@ -87,7 +87,7 @@ Out of all the model export formats supported by Ultralytics, NCNN delivers the 
 from ultralytics import YOLO
 
 # Load a YOLO11n PyTorch model
-model = YOLO("yolo11n.pt")
+model = YOLO("yolo11n.pt") # make sure the path is correct for your model
 
 # Export the model to NCNN format
 model.export(format="ncnn")  # creates 'yolo11n_ncnn_model'
@@ -99,6 +99,8 @@ ncnn_model = YOLO("yolo11n_ncnn_model")
 results = ncnn_model("https://ultralytics.com/images/bus.jpg") 
 
 ```
+
+
 
 
 2. **Use Raspberrypi camera with the model**
@@ -123,7 +125,7 @@ picam2.configure("preview")
 picam2.start()
 
 # Load the YOLO11 model
-model = YOLO("yolo11n.pt")
+model = YOLO("yolo11n_ncnn_model") # edit based on model name above
 
 while True:
     # Capture frame-by-frame
