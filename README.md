@@ -18,7 +18,7 @@ Follow the guide to setup your raspberry pi on their official webpage:
 [Official guide on the RaspberryPi Website](https://www.raspberrypi.com/documentation/computers/getting-started.html)
 
 
-TIPS: [RaspberryPi Connect](https://www.raspberrypi.com/documentation/computers/getting-started.html#raspberry-pi-connect) to be able to connect to your raspberryPi remotely. 
+TIPS: Enable [RaspberryPi Connect](https://www.raspberrypi.com/documentation/computers/getting-started.html#raspberry-pi-connect) to be able to connect to your raspberryPi remotely. 
 
 
 ## Camera Module
@@ -77,9 +77,19 @@ picam2.capture_file("test.jpg")
 *Official guide from Ultralytics platform: https://docs.ultralytics.com/guides/raspberry-pi/#install-ultralytics-package*
 
 
-### Use NCNN on Raspberry Pi
+### Run TensorFlow Lite (tflite) on Raspberry Pi
 
-Out of all the model export formats supported by Ultralytics, NCNN delivers the best inference performance when working with Raspberry Pi devices because NCNN is highly optimized for mobile/ embedded platforms (such as ARM architecture). Therefor our recommendation is to use NCNN with Raspberry Pi.
+Running TensorFlow Lite (TFLite) models on a Raspberry Pi offers several key advantages:
+
+- **Improved Performance**: TFLite models are optimized for on-device inference, resulting in faster execution times on resource-constrained devices like the Raspberry Pi14.
+- **Reduced Latency**: By processing data locally, TFLite minimizes the need for cloud-based computation, leading to quicker response times in real-time applications13.
+- **Offline Capability**: TFLite models can run without an internet connection, making them suitable for remote or disconnected environments1.
+- **Power Efficiency**: TFLite's optimization techniques result in lower power consumption, which is crucial for battery-powered or energy-constrained Raspberry Pi projects3.
+- **Versatility**: TFLite supports various applications on Raspberry Pi, including computer vision tasks, object detection, and image classification4.
+- **Hardware Acceleration**: TFLite can leverage hardware acceleration on the Raspberry Pi, further improving performance for neural network computations34.
+
+
+First step is to convert your yolo model to tflite: 
 
 1. **Convert model:** 
 
@@ -90,16 +100,31 @@ from ultralytics import YOLO
 model = YOLO("yolo11n.pt") # make sure the path is correct for your model
 
 # Export the model to NCNN format
-model.export(format="ncnn")  # creates 'yolo11n_ncnn_model'
-
-# Load the exported NCNN model
-ncnn_model = YOLO("yolo11n_ncnn_model")
-
-# Run inference
-results = ncnn_model("https://ultralytics.com/images/bus.jpg") 
+model.export(format="tflite")  # creates 'best_saved_model' folder
 
 ```
 
+If you want to check the model sizes and compare after exporting to tflite, you can run this code: 
+
+```python
+
+yolo11n_file = "runs/detect/train/weights/best.pt"
+tflite_file = "runs/detect/train/weights/best_saved_model/best_int8.tflite"
+
+def get_model_size(filepath):
+
+  # Get the file size in bytes
+  file_size = os.path.getsize(filepath)
+
+  # Convert to MB for readability
+  file_size_MB = file_size / (1024 * 1024)
+
+  print(f"Model size: {file_size_MB:.2f} MB")
+
+get_model_size(yolo11n_file)
+get_model_size(tflite_file)
+
+```
 
 
 
@@ -125,13 +150,13 @@ picam2.configure("preview")
 picam2.start()
 
 # Load the YOLO11 model
-model = YOLO("yolo11n_ncnn_model") # edit based on model name above
+model = YOLO("models/best_int8.tflite") # edit based on model name above
 
 while True:
     # Capture frame-by-frame
     frame = picam2.capture_array()
 
-    # Run YOLO11 inference on the frame
+    # Run ftlite-model inference on the frame
     results = model(frame)
 
     # Visualize the results on the frame
