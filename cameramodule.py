@@ -12,9 +12,8 @@ picam2.preview_configuration.align()
 picam2.configure("preview")
 picam2.start()
 
-# Load the YOLO11 model
-ncnn_model = YOLO("acc94_ncnn_model")
-#ncnn_model = YOLO("yolov8n.pt")
+# Load the thflite insect detection model
+model = YOLO("./models/best_int8.tflite")
 
 
 while True:
@@ -22,7 +21,7 @@ while True:
     frame = picam2.capture_array()
 
     # Run YOLO11 inference on the frame
-    results = ncnn_model(frame)
+    results = model(frame)
 
     # Visualize the results on the frame
     annotated_frame = results[0].plot()
