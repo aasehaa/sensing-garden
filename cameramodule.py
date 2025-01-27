@@ -1,6 +1,6 @@
 
 import cv2
-from picamera2 import Picamera2
+from picamera2 import Picamera2, controls
 
 from ultralytics import YOLO
 
@@ -9,6 +9,7 @@ picam2 = Picamera2()
 picam2.preview_configuration.main.size = (1280, 720)
 picam2.preview_configuration.main.format = "RGB888"
 picam2.preview_configuration.align()
+picam2.set_controls({"AfMode": 0})
 picam2.configure("preview")
 picam2.start()
 
