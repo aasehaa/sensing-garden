@@ -13,7 +13,7 @@ picam2.configure("preview")
 picam2.start()
 
 # Load the thflite insect detection model
-model = YOLO("./models/best_int8.tflite")
+model = YOLO("./models/float32_workshop2.tflite")
 
 
 while True:
