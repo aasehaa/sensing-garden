@@ -19,7 +19,9 @@ def capture_and_store():
     frame = picam2.capture_array()
 
     # Run detection
-    detections = model(frame)
+    detections = model.track(frame, persist=True, conf=0.5, tracker='botsort.yaml')
+    annotated_frame = detections[0].plot()
+    cv2.imshow('YOLO tracking', annotated_frame)
 
     # Check if there are any detections
     if len(detections[0].boxes) > 0:  # This checks if there are any bounding boxes
@@ -30,7 +32,7 @@ def capture_and_store():
         cv2.imwrite(filename, frame) 
 
         # Log and store detection information
-        save_hq_detection("video_detections.log", detections, timestamp, "video")
+        #save_hq_detection("video_detections.log", detections, timestamp, "video")
 
     else:
         print("No objects detected in this frame.")

@@ -44,6 +44,14 @@ You should see a camera preview window for about five seconds. If you do not, pl
 
 *Note to self: If you're using picamera2 installed through `apt`, you don't need a virtual environment. Just run your script directly with the system's Python*
 
+### RaspberryPi Camera Module 3: configuring focus and lens position
+
+When using camera module 3 from raspberry pi, you would need to turn off the autofocus and set a lense position:
+
+`picam2.set_controls({"AfMode": 0, "LensPosition": 0.5})` 
+
+"AfMode" sets the mode to 0 (autofocus off), and LensPosition to 0.5. The LensPosition value ranges from 0.0 to 1.0, where 0.0 is focused at infinity and 1.0 is focused as close as possible. You'll need to experiment with this value to find the optimal focus for your setup.
+
 
 ### First example
 

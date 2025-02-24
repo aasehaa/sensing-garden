@@ -2,7 +2,7 @@ from ultralytics import YOLO
 import os
 import time
 import cv2
-from save_cropped_image import save_hq_detection
+from utils import save_hq_detection
 from utils import log_detection_information
 from PIL import Image
 

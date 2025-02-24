@@ -13,7 +13,7 @@ picam2.configure(camera_config)
 picam2.start()
 
 # Load the YOLO model
-model = YOLO("./models/genericInsect/best.pt")
+model = YOLO("./localisation-classification-device/best-9species.pt")
 
 
 def capture_and_store():
