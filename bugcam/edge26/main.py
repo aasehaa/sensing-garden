@@ -17,6 +17,15 @@ from bugcam.edge26.output import ResultsWriter
 from bugcam.edge26.metrics import PipelineMetrics
 from bugcam.edge26.queue import ClassificationQueue, QueueEntry
 from bugcam.edge26.result_health import audit_result_dir
+from bugcam.edge26.sidecars import (
+    COMPLETED_TRACKS,
+    DETECTION_META,
+    DONE,
+    EXPECTED_TRACKS,
+    LAST_RECORDING,
+    RESULTS,
+    SWEEP_NON_CONTENT,
+)
 from bugcam.log_shipping import DailyLogHandler, ship_existing_logs
 from bugcam.record_window import RecordingWindow, local_video_date, resolve_zone, video_stem_utc_iso
 from bugcam.capture_report import CAPTURES_SUBDIR
@@ -515,7 +524,7 @@ class Pipeline:
     
     @property
     def _marker_path(self) -> Path:
-        return self.input_storage / ".last_recording"
+        return self.input_storage / LAST_RECORDING
     
     def _load_last_recording_marker(self) -> None:
         """Read the .last_recording marker on startup."""
@@ -785,12 +794,12 @@ class Pipeline:
                         for track_id in result.confirmed_tracks
                     } if hasattr(result, "all_detections") else {},
                 }
-                meta_path = output_dir / ".detection.json"
+                meta_path = output_dir / DETECTION_META
                 meta_path.write_text(json.dumps(detection_meta, indent=2, default=str))
                 
                 # Write expected track count for completeness check -- must be
                 # on disk before the first track is enqueued
-                (output_dir / ".expected_tracks").write_text(str(confirmed_count))
+                (output_dir / EXPECTED_TRACKS).write_text(str(confirmed_count))
                 logger.info(f"  Detection metadata saved ({confirmed_count} tracks)")
 
                 for track_id, track, track_dir in queueable_tracks:
@@ -821,7 +830,7 @@ class Pipeline:
                     "tracks": [],
                 }
                 self.writer.write_results(results=empty_results, output_dir=output_dir)
-                (output_dir / ".done").write_text("classified=0\nexpected=0\n")
+                (output_dir / DONE).write_text("classified=0\nexpected=0\n")
                 logger.info("  No confirmed tracks, marked directory done")
                 # Detection runs in a subprocess with no upload callback, so
                 # hand the finalized dir to the main-process classification
@@ -909,7 +918,7 @@ class Pipeline:
                 # One track per dir: complete-on-single, so .done fires immediately.
                 # Must be on disk before the enqueue, or a fast classification
                 # no-ops the completion check and the dir never reaches .done.
-                (track_output_dir / ".expected_tracks").write_text("1")
+                (track_output_dir / EXPECTED_TRACKS).write_text("1")
 
                 # Queue for classification. track_id stays bare: the backend
                 # reconstructs crop/composite keys as {track_id}_{timestamp} and keys
@@ -1082,7 +1091,7 @@ class Pipeline:
                    f"({final_pred['species_confidence']:.1%})")
         
         # Load existing results
-        results_path = output_dir / "results.json"
+        results_path = output_dir / RESULTS
         results = self._load_existing_results(results_path)
         
         # Load detection metadata to enrich results
@@ -1204,7 +1213,7 @@ class Pipeline:
                 logger.warning(f"  Could not create composite: {e}")
         
         # Load existing results
-        results_path = output_dir / "results.json"
+        results_path = output_dir / RESULTS
         results = self._load_existing_results(results_path)
         
         # Deduplicate track_id if this is a retry after crash
@@ -1239,7 +1248,7 @@ class Pipeline:
     @staticmethod
     def _load_detection_meta(output_dir: Path) -> dict:
         """Load detection metadata sidecar if available."""
-        meta_path = output_dir / ".detection.json"
+        meta_path = output_dir / DETECTION_META
         if meta_path.exists():
             try:
                 return json.loads(meta_path.read_text())
@@ -1257,9 +1266,9 @@ class Pipeline:
         Also called on graceful failures (missing crops, empty dirs) and
         permanent queue failures to ensure .done is always written eventually.
         """
-        expected_path = output_dir / ".expected_tracks"
+        expected_path = output_dir / EXPECTED_TRACKS
         if not expected_path.exists():
-            if (output_dir / ".done").exists():
+            if (output_dir / DONE).exists():
                 # Re-check after finalization (e.g. a retried entry): benign.
                 logger.debug(f"Completion check on already-finalized {output_dir.name}")
             else:
@@ -1277,7 +1286,7 @@ class Pipeline:
             return
 
         # Atomically increment completed count
-        completed_path = output_dir / ".completed_tracks"
+        completed_path = output_dir / COMPLETED_TRACKS
         try:
             completed = int(completed_path.read_text().strip()) + 1
         except FileNotFoundError:
@@ -1293,12 +1302,12 @@ class Pipeline:
         logger.info(f"  Classification progress: {completed}/{expected} in {output_dir.name}")
 
         if completed >= expected:
-            done_path = output_dir / ".done"
+            done_path = output_dir / DONE
             done_path.write_text(f"classified={completed}\nexpected={expected}\n")
             logger.info(f"Classification complete: {completed}/{expected} tracks in {output_dir.name}")
             expected_path.unlink(missing_ok=True)
             completed_path.unlink(missing_ok=True)
-            detection_meta_path = output_dir / ".detection.json"
+            detection_meta_path = output_dir / DETECTION_META
             detection_meta_path.unlink(missing_ok=True)
             self._audit_finalized_dir(output_dir)
             self._notify_result_ready(output_dir)
@@ -1348,7 +1357,7 @@ class Pipeline:
                         continue
                     scanned += 1
 
-                    done_path = output_dir / ".done"
+                    done_path = output_dir / DONE
                     if done_path.exists():
                         # A finalized directory that is still fully present past the
                         # threshold was never actually published (a successful
@@ -1367,8 +1376,8 @@ class Pipeline:
                             orphans_retried += 1
                         continue
 
-                    results_path = output_dir / "results.json"
-                    expected_path = output_dir / ".expected_tracks"
+                    results_path = output_dir / RESULTS
+                    expected_path = output_dir / EXPECTED_TRACKS
                     
                     # Case 1: Has results.json but not marked done
                     if results_path.exists() and not expected_path.exists():
@@ -1391,7 +1400,7 @@ class Pipeline:
                             expected = int(expected_path.read_text().strip())
                         except (ValueError, OSError):
                             expected = 0
-                        completed_path = output_dir / ".completed_tracks"
+                        completed_path = output_dir / COMPLETED_TRACKS
                         try:
                             completed = int(completed_path.read_text().strip())
                         except (ValueError, OSError):
@@ -1422,10 +1431,9 @@ class Pipeline:
                     
                     # Case 2: Empty directory (no results.json, no classification activity)
                     elif not results_path.exists() and not expected_path.exists():
-                        sidecar_names = {".done", ".detection.json", ".expected_tracks", ".completed_tracks", "results.json.tmp"}
                         has_content = False
                         for f in output_dir.rglob("*"):
-                            if f.is_file() and f.name not in sidecar_names:
+                            if f.is_file() and f.name not in SWEEP_NON_CONTENT:
                                 has_content = True
                                 break
                         if not has_content:
@@ -1465,9 +1473,9 @@ class Pipeline:
                         if not output_dir.is_dir() or output_dir.name in NON_RESULT_SUBDIRS:
                             continue
                         total += 1
-                        if (output_dir / ".done").exists():
+                        if (output_dir / DONE).exists():
                             finalized_unpublished += 1
-                        elif (output_dir / ".expected_tracks").exists():
+                        elif (output_dir / EXPECTED_TRACKS).exists():
                             awaiting += 1
                         else:
                             other += 1

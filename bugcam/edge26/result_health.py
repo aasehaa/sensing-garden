@@ -8,14 +8,15 @@ missing or truncated. The audit re-derives what a healthy directory must look
 like from the files themselves and reports every mismatch, so bad results show
 up as errors in the shipped logs instead of publishing silently.
 
-Stdlib-only on purpose: auditing must never depend on the camera/inference stack.
+Stdlib-only on purpose (plus the constants-only sidecars module): auditing
+must never depend on the camera/inference stack.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-RESULTS_FILENAME = "results.json"
+from bugcam.edge26.sidecars import DONE, RESULTS
 
 
 def _parse_done(done_path: Path) -> dict[str, str]:
@@ -59,7 +60,7 @@ def audit_result_dir(output_dir: Path) -> list[str]:
     output_dir = Path(output_dir)
     problems: list[str] = []
 
-    done_fields = _parse_done(output_dir / ".done")
+    done_fields = _parse_done(output_dir / DONE)
     expected = _int_field(done_fields, "expected")
     # The normal path writes classified=, the stale sweep writes completed=.
     classified = _int_field(done_fields, "classified")
@@ -74,7 +75,7 @@ def audit_result_dir(output_dir: Path) -> list[str]:
             f"classified count {classified} exceeds expected {expected} (completion double-counted)"
         )
 
-    results_json = output_dir / RESULTS_FILENAME
+    results_json = output_dir / RESULTS
     if not results_json.exists():
         problems.append("marked done but results.json is missing (no classification produced output)")
         return problems
