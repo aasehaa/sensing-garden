@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from bugcam.device_config import load_device_config, resolve_flick_id
+from bugcam.settings import load_device_config, resolve_flick_id
 
 
 def test_load_device_config_reads_flick_id_from_persistent_config(tmp_path: Path, monkeypatch) -> None:

@@ -9,8 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from rich.console import Console
 from typing import Optional
-from ..config import get_input_storage_dir
-from ..device_config import resolve_flick_id
+from ..settings import get_input_storage_dir, resolve_flick_id
 from ..processing import parse_capture_resolution
 
 app = typer.Typer(help="Record videos from camera")

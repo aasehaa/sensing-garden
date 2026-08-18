@@ -23,7 +23,7 @@ def test_setup_fails_on_non_linux(cli_runner: CliRunner) -> None:
 
 def test_setup_detects_hailo_venv_python(cli_runner: CliRunner, tmp_path: Path) -> None:
     """Test get_python_for_detection prefers hailo venv if available."""
-    from bugcam.config import get_python_for_detection
+    from bugcam.settings import get_python_for_detection
 
     # Create fake hailo venv
     hailo_python = tmp_path / ".local" / "share" / "bugcam" / "hailo-venv" / "bin" / "python"
@@ -37,9 +37,9 @@ def test_setup_detects_hailo_venv_python(cli_runner: CliRunner, tmp_path: Path) 
 
 def test_setup_falls_back_to_system_python(cli_runner: CliRunner, tmp_path: Path) -> None:
     """Test get_python_for_detection falls back to /usr/bin/python3 on Linux."""
-    from bugcam.config import get_python_for_detection
+    from bugcam.settings import get_python_for_detection
 
-    with patch('bugcam.config.platform.system', return_value='Linux'), \
+    with patch('bugcam.settings.platform.system', return_value='Linux'), \
          patch.object(Path, 'home', return_value=tmp_path):
         # Hailo venv doesn't exist, falls back to system python
         python = get_python_for_detection()
@@ -48,10 +48,10 @@ def test_setup_falls_back_to_system_python(cli_runner: CliRunner, tmp_path: Path
 
 def test_setup_uses_sys_executable_fallback(cli_runner: CliRunner) -> None:
     """Test get_python_for_detection uses sys.executable as final fallback."""
-    from bugcam.config import get_python_for_detection
+    from bugcam.settings import get_python_for_detection
     import sys
 
-    with patch('bugcam.config.platform.system', return_value='Darwin'), \
+    with patch('bugcam.settings.platform.system', return_value='Darwin'), \
          patch('pathlib.Path.is_file', return_value=False):
         python = get_python_for_detection()
         assert python == sys.executable

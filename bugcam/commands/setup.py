@@ -12,9 +12,10 @@ import requests
 import typer
 from rich.console import Console
 
-from ..config import (
+from ..settings import (
     DEFAULT_API_URL,
     DEFAULT_S3_BUCKET,
+    build_dot_ids,
     get_default_flick_id,
     get_hailo_venv_dir,
     get_python_for_detection,
@@ -22,7 +23,6 @@ from ..config import (
     load_config,
     save_config,
 )
-from ..device_config import build_dot_ids
 
 app = typer.Typer(help="Install dependencies")
 console = Console()

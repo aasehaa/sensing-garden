@@ -52,7 +52,7 @@ def create_app(config=None) -> Flask:
 
 def _get_input_storage() -> Path:
     """Get the input storage directory from bugcam config."""
-    from ..config import get_input_storage_dir
+    from ..settings import get_input_storage_dir
     return get_input_storage_dir()
 
 

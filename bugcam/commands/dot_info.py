@@ -8,7 +8,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from bugcam.config import get_input_storage_dir, get_output_storage_dir, load_config, parse_dot_ids
+from bugcam.settings import get_input_storage_dir, get_output_storage_dir, load_config, parse_dot_ids
 
 app = typer.Typer(help="Show DOT sensor setup info", invoke_without_command=True, no_args_is_help=False)
 console = Console()

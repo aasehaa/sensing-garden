@@ -5,7 +5,7 @@ import subprocess
 import platform
 from pathlib import Path
 from rich.console import Console
-from ..config import (
+from ..settings import (
     get_edge26_labels_path,
     get_edge26_model_path,
     get_input_storage_dir,

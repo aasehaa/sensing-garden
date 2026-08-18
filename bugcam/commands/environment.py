@@ -7,8 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from bugcam.config import get_output_storage_dir
-from bugcam.device_config import resolve_flick_id
+from bugcam.settings import get_output_storage_dir, resolve_flick_id
 from bugcam.environment_sensor import collect_environment_reading
 
 
