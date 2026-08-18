@@ -10,7 +10,7 @@ from datetime import datetime
 from rich.console import Console
 from typing import Optional
 from ..settings import get_input_storage_dir, resolve_flick_id
-from ..processing import parse_capture_resolution
+from ..edge26.config import parse_capture_resolution
 
 app = typer.Typer(help="Record videos from camera")
 console = Console()

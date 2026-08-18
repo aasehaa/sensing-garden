@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from bugcam.processing import build_bundle_provenance, build_edge26_config
+from bugcam.edge26.config import build_bundle_provenance, build_edge26_config
 
 BUGSPOT_RATIO_DETECTION_VALUES: tuple[tuple[str, float | int], ...] = (
     ("min_area", 0.00012),

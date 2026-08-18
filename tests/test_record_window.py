@@ -211,7 +211,7 @@ def test_wait_for_window_without_window_is_open(tmp_path: Path) -> None:
 # --- config plumbing ---
 
 def test_edge26_config_carries_timezone_and_window(tmp_path: Path) -> None:
-    from bugcam.processing import build_edge26_config
+    from bugcam.edge26.config import build_edge26_config
 
     config = build_edge26_config(
         flick_id="flick-test",

@@ -31,7 +31,7 @@ from bugcam.settings import (
 )
 from bugcam.commands.status import _check_time_sync
 from bugcam.environment_sensor import collect_environment_reading
-from bugcam.processing import parse_capture_resolution
+from bugcam.edge26.config import parse_capture_resolution
 from bugcam.record_window import RecordingWindow
 from bugcam.runtime import build_pipeline, resolve_bundle_provenance, select_model_reference
 from bugcam.receiver import create_app
