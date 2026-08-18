@@ -79,16 +79,17 @@ class VideoProcessor:
         tracking_str = "continuous" if self.continuous_tracking else "per-video"
         logger.info(f"VideoProcessor initialized ({classify_str}, tracking: {tracking_str})")
     
-    def classify_dot_track(self, track_dir: Path, track_id: str,
-                           timestamp: Optional[str] = None) -> Optional[Dict]:
+    def classify_track_crops(self, track_dir: Path, track_id: str,
+                             timestamp: Optional[str] = None) -> Optional[Dict]:
         """
-        Classify crops from a single DOT track directory.
-        
+        Classify crops from a single track directory (FLIK or DOT -- nothing
+        here is device-specific, it just classifies frame_*.jpg crops).
+
         Args:
             track_dir: Path to track directory containing frame_*.jpg crops
-            track_id: Track identifier (hash only, e.g. "a1b2c3d4")
+            track_id: Track identifier
             timestamp: Track timestamp as HHMMSS string, or None
-            
+
         Returns:
             Dict with track classification results, or None if no valid crops
         """
