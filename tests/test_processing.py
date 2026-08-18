@@ -132,12 +132,12 @@ def test_build_edge26_config_reports_hardcoded_defaults_when_no_file(tmp_path: P
 
 
 def test_video_processor_passes_ratio_config_to_bugspot() -> None:
-    from bugcam.edge26.processing.processor import VideoProcessor
+    from bugcam.edge26.detection import VideoProcessor
 
     detection = dict(BUGSPOT_RATIO_DETECTION_VALUES)
     tracking = {"max_lost_frames": 45, "w_dist": 0.6, "w_area": 0.4, "cost_threshold": 0.3}
 
-    with patch("bugcam.edge26.processing.processor.DetectionPipeline") as pipeline:
+    with patch("bugcam.edge26.detection.DetectionPipeline") as pipeline:
         VideoProcessor({"detection": detection, "tracking": tracking})
 
     pipeline.assert_called_once_with(

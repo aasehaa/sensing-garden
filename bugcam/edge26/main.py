@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 import cv2
 
 from bugcam.edge26.recorder import VideoRecorder
-from bugcam.edge26.processing import VideoProcessor, HailoClassifier
+from bugcam.edge26.detection import VideoProcessor
+from bugcam.edge26.classification import HailoClassifier
 from bugcam.edge26.output import ResultsWriter
 from bugcam.edge26.metrics import PipelineMetrics
 from bugcam.edge26.queue import ClassificationQueue, QueueEntry

@@ -1,8 +1,10 @@
 """
 Video processor for insect detection pipeline.
 
-Uses BugSpot core for detection, tracking, crop extraction, and composites.
-Adds Hailo classification and hierarchical aggregation on top.
+Preprocessing (background subtraction, blob extraction) and tracking are
+BugSpot's own responsibility (DetectionPipeline); this module wraps that for
+crop/composite output and adds Hailo classification + hierarchical
+aggregation on top. Re-exports BugSpot's core types below for convenience.
 """
 
 import cv2
@@ -12,9 +14,28 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from bugspot import DetectionPipeline
+from bugspot import (
+    DetectionPipeline,
+    MotionDetector,
+    Detection,
+    InsectTracker,
+    Track,
+    analyze_path_topology,
+    check_track_consistency,
+)
 
-from .classifier import HailoClassifier, HierarchicalClassification
+from .classification import HailoClassifier, HierarchicalClassification
+
+__all__ = [
+    "VideoProcessor",
+    "DetectionPipeline",
+    "MotionDetector",
+    "Detection",
+    "InsectTracker",
+    "Track",
+    "analyze_path_topology",
+    "check_track_consistency",
+]
 
 logger = logging.getLogger(__name__)
 
