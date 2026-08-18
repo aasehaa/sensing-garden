@@ -16,8 +16,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import bugcam.edge26.capture.recorder as recorder_module
-from bugcam.edge26.capture.recorder import VideoRecorder
+import bugcam.edge26.recorder as recorder_module
+from bugcam.edge26.recorder import VideoRecorder
 
 
 def make_recorder(tmp_path: Path, **overrides) -> VideoRecorder:

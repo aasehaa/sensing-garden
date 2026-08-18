@@ -289,7 +289,7 @@ class TestCaptureReportLoop:
 
 class TestRecorderNotifiesChunkComplete:
     def _recorder(self, tmp_path, callback):
-        from bugcam.edge26.capture.recorder import VideoRecorder
+        from bugcam.edge26.recorder import VideoRecorder
 
         return VideoRecorder(
             output_dir=str(tmp_path),
@@ -314,7 +314,7 @@ class TestRecorderNotifiesChunkComplete:
             writer.release.side_effect = lambda: Path(path).write_bytes(b"v")
             return writer
 
-        with patch("bugcam.edge26.capture.recorder.cv2.VideoWriter", side_effect=fake_writer):
+        with patch("bugcam.edge26.recorder.cv2.VideoWriter", side_effect=fake_writer):
             chunk_path = recorder._record_chunk()
 
         assert chunk_path is not None
@@ -336,5 +336,5 @@ class TestRecorderNotifiesChunkComplete:
             writer.release.side_effect = lambda: Path(path).write_bytes(b"v")
             return writer
 
-        with patch("bugcam.edge26.capture.recorder.cv2.VideoWriter", side_effect=fake_writer):
+        with patch("bugcam.edge26.recorder.cv2.VideoWriter", side_effect=fake_writer):
             assert recorder._record_chunk() is not None  # chunk still completes
