@@ -29,9 +29,9 @@ from bugcam.settings import (
     parse_dot_ids,
     resolve_flick_id,
 )
+from bugcam.commands import parse_resolution_option
 from bugcam.commands.status import _check_time_sync
 from bugcam.environment_sensor import collect_environment_reading
-from bugcam.edge26.config import parse_capture_resolution
 from bugcam.record_window import RecordingWindow
 from bugcam.runtime import build_pipeline, resolve_bundle_provenance, select_model_reference
 from bugcam.receiver import create_app
@@ -210,13 +210,6 @@ def _finalization_loop(tracker: PendingTrackTracker, stop_event: threading.Event
         except Exception as e:
             logger.error(f"Finalization loop error: {e}")
         stop_event.wait(PendingTrackTracker.CHECK_INTERVAL)
-
-
-def _parse_resolution_option(value: str) -> tuple[int, int]:
-    try:
-        return parse_capture_resolution(value)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
 
 
 def _resolve_runtime_settings(
@@ -448,7 +441,7 @@ def run(
     except RuntimeError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
-    parsed_resolution = _parse_resolution_option(resolution)
+    parsed_resolution = parse_resolution_option(resolution)
 
     try:
         ntp_ok, ntp_detail = _check_time_sync()

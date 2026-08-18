@@ -10,7 +10,7 @@ from datetime import datetime
 from rich.console import Console
 from typing import Optional
 from ..settings import get_input_storage_dir, resolve_flick_id
-from ..edge26.config import parse_capture_resolution
+from . import parse_resolution_option
 
 app = typer.Typer(help="Record videos from camera")
 console = Console()
@@ -26,13 +26,6 @@ def _build_recording_path(output_dir: Path, flick_id: str) -> Path:
 
 def _resolve_recording_flick_id(flick_id: Optional[str]) -> str:
     return resolve_flick_id(flick_id)
-
-
-def _parse_resolution_option(value: str) -> tuple[int, int]:
-    try:
-        return parse_capture_resolution(value)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
 
 
 def _check_disk_space(output_dir: Path, min_free_mb: int = 300) -> tuple[bool, int]:
@@ -155,7 +148,7 @@ def single(
     if not _check_camera_available():
         console.print("[red]Camera not accessible[/red]")
         raise typer.Exit(1)
-    parsed_resolution = _parse_resolution_option(resolution)
+    parsed_resolution = parse_resolution_option(resolution)
     resolved_flick_id = _resolve_recording_flick_id(flick_id)
 
     # Generate output path if not specified
