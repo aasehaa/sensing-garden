@@ -152,7 +152,7 @@ def test_video_processor_passes_ratio_config_to_bugspot() -> None:
 
 
 def test_dot_done_signal_processing_uses_existing_track_crops(tmp_path: Path) -> None:
-    from bugcam.edge26 import main as edge26_main
+    from bugcam.edge26 import pipeline as edge26_main
 
     input_dir = tmp_path / "input"
     output_dir = tmp_path / "output"

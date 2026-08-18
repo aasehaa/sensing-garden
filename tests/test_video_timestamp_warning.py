@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 
 def _pipeline(tmp_path):
-    from bugcam.edge26 import main as edge26_main
+    from bugcam.edge26 import pipeline as edge26_main
 
     with patch.object(edge26_main, "VideoProcessor"):
         pipeline = edge26_main.Pipeline(

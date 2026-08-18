@@ -15,7 +15,7 @@ tests/test_dot_per_track.py.
 import json
 from pathlib import Path
 
-from bugcam.edge26.main import Pipeline
+from bugcam.edge26.pipeline import Pipeline
 from bugcam.edge26.queue import QueueEntry
 from bugcam.edge26.result_publish import publish_result_dir
 from bugcam.pollen.pollen import Pollen, PollenConfig
