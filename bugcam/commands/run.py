@@ -34,9 +34,8 @@ from bugcam.commands.status import _check_time_sync
 from bugcam.environment_sensor import collect_environment_reading
 from bugcam.record_window import RecordingWindow
 from bugcam.runtime import build_pipeline, resolve_bundle_provenance, select_model_reference
-from bugcam.receiver import create_app
+from bugcam.receiver import create_app, start_tracker_finalization
 from bugcam.receiver.config import RECEIVER_DEFAULT_PORT, RECEIVER_DEFAULT_HOST
-from bugcam.receiver.tracker import finalization_loop
 
 app = typer.Typer(help="Record, process, upload, and emit heartbeats", invoke_without_command=True, no_args_is_help=False)
 console = Console()
@@ -177,22 +176,20 @@ def _receiver_loop(
     port: int,
     stop_event: threading.Event,
 ) -> None:
-    """Run the Flask receiver server in a thread."""
+    """Run the Flask receiver server in a thread.
+
+    debug=False, not exposed as a flag here: the receiver shares this
+    process with the live recording/detection pipeline, and Werkzeug's
+    debug mode reloader restarts the whole interpreter on file changes --
+    destructive mid-recording. `bugcam receive start` runs the receiver
+    standalone, where --debug is safe; see start_receiver in receive.py.
+    """
     flask_app = create_app(config={"host": host, "port": port})
     tracker = flask_app.config.get("TRACKER")
 
+    finalization_thread = finalization_stop = None
     if tracker:
-        logger.info("Scanning for orphaned tracks...")
-        tracker.recover_orphaned_tracks()
-
-        finalization_stop = threading.Event()
-        finalization_thread = threading.Thread(
-            target=finalization_loop,
-            args=(tracker, finalization_stop),
-            daemon=True
-        )
-        finalization_thread.start()
-        logger.info("Track finalization thread started for receiver")
+        finalization_thread, finalization_stop = start_tracker_finalization(tracker)
 
     logger.info(f"Receiver starting on {host}:{port}")
     flask_app.run(host=host, port=port, threaded=True, debug=False)
