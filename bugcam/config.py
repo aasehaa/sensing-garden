@@ -74,8 +74,13 @@ def get_cache_dir() -> Path:
     """Get the cache directory for bugcam, respecting XDG_CACHE_HOME."""
     xdg_cache = os.environ.get("XDG_CACHE_HOME")
     if xdg_cache:
-        return Path(xdg_cache) / "bugcam"
+        return _expand(xdg_cache) / "bugcam"
     return Path.home() / ".cache" / "bugcam"
+
+
+def _expand(value: str) -> Path:
+    """Expand a leading '~' in a path from an env var or config value."""
+    return Path(value).expanduser()
 
 
 def _validate_state_dir(path: Path) -> None:
@@ -90,19 +95,19 @@ def get_state_dir() -> Path:
     """Get the state directory for bugcam, respecting config and environment."""
     state_dir = os.environ.get("BUGCAM_STATE_DIR")
     if state_dir:
-        path = Path(state_dir)
+        path = _expand(state_dir)
         _validate_state_dir(path)
         return path
 
     config = load_config()
     if config.get("state_dir"):
-        path = Path(str(config["state_dir"]))
+        path = _expand(str(config["state_dir"]))
         _validate_state_dir(path)
         return path
 
     xdg_data = os.environ.get("XDG_DATA_HOME")
     if xdg_data:
-        return Path(xdg_data) / "bugcam"
+        return _expand(xdg_data) / "bugcam"
     return Path.home() / ".local" / "share" / "bugcam"
 
 
@@ -110,11 +115,11 @@ def get_input_storage_dir() -> Path:
     """Get the edge26 input storage directory."""
     input_dir = os.environ.get("BUGCAM_INPUT_DIR")
     if input_dir:
-        return Path(input_dir)
+        return _expand(input_dir)
 
     config = load_config()
     if config.get("input_dir"):
-        return Path(str(config["input_dir"]))
+        return _expand(str(config["input_dir"]))
 
     return get_state_dir() / "incoming"
 
@@ -123,11 +128,11 @@ def get_pending_dir() -> Path:
     """Get the pending classification queue directory."""
     pending_dir = os.environ.get("BUGCAM_PENDING_DIR")
     if pending_dir:
-        return Path(pending_dir)
+        return _expand(pending_dir)
 
     config = load_config()
     if config.get("pending_dir"):
-        return Path(str(config["pending_dir"]))
+        return _expand(str(config["pending_dir"]))
 
     return get_state_dir() / "pending"
 
@@ -136,11 +141,11 @@ def get_output_storage_dir() -> Path:
     """Get the edge26 output storage directory."""
     output_dir = os.environ.get("BUGCAM_OUTPUT_DIR")
     if output_dir:
-        return Path(output_dir)
+        return _expand(output_dir)
 
     config = load_config()
     if config.get("output_dir"):
-        return Path(str(config["output_dir"]))
+        return _expand(str(config["output_dir"]))
 
     return get_state_dir() / "outputs"
 
@@ -174,7 +179,7 @@ def get_edge26_labels_path(model_path: Path | None = None) -> Path:
 
     labels_path = os.environ.get("BUGCAM_EDGE26_LABELS")
     if labels_path:
-        return Path(labels_path)
+        return _expand(labels_path)
 
     model_ref = os.environ.get("BUGCAM_EDGE26_MODEL")
     resolved = resolve_labels_path(model_ref)
@@ -194,7 +199,7 @@ def get_edge26_taxonomy_cache_path() -> Path:
     """Get the taxonomy cache file path."""
     cache_path = os.environ.get("BUGCAM_EDGE26_TAXONOMY_CACHE")
     if cache_path:
-        return Path(cache_path)
+        return _expand(cache_path)
     return get_state_dir() / "taxonomy-cache.json"
 
 

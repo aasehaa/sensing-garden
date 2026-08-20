@@ -7,6 +7,16 @@ from typer.testing import CliRunner
 from bugcam.cli import app
 
 
+def test_create_storage_dirs_expands_tilde(tmp_path: Path, monkeypatch) -> None:
+    """A literal '~' from the setup prompt must resolve to $HOME."""
+    from bugcam.commands.setup import _create_storage_dirs
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _create_storage_dirs({"state_dir": "~/data/bugcam"})
+    assert (tmp_path / "data" / "bugcam").is_dir()
+    assert not (tmp_path / "~").exists()
+
+
 def test_setup_help(cli_runner: CliRunner) -> None:
     """Test setup command help."""
     result = cli_runner.invoke(app, ["setup", "--help"])

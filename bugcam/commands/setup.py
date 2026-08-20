@@ -15,6 +15,7 @@ from rich.console import Console
 from ..config import (
     DEFAULT_API_URL,
     DEFAULT_S3_BUCKET,
+    _expand,
     get_default_flick_id,
     get_hailo_venv_dir,
     get_python_for_detection,
@@ -409,7 +410,7 @@ def _create_storage_dirs(config: dict[str, Any]) -> None:
     ]
     for dir_path in dirs_to_create:
         if dir_path:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            _expand(dir_path).mkdir(parents=True, exist_ok=True)
     console.print("[green]Storage directories created.[/green]\n")
 
 
