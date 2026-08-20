@@ -8,7 +8,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from bugcam.settings import get_input_storage_dir, get_output_storage_dir, load_config, parse_dot_ids
+from bugcam.settings import get_configured_flick_id, get_input_storage_dir, get_output_storage_dir, load_config, parse_dot_ids
 
 app = typer.Typer(help="Show DOT sensor setup info", invoke_without_command=True, no_args_is_help=False)
 console = Console()
@@ -25,7 +25,7 @@ class DotInfoSettings:
 def _load_dot_info_settings() -> DotInfoSettings:
     config = load_config()
     return DotInfoSettings(
-        flick_id=str(config.get("flick_id") or config.get("device_id") or "").strip(),
+        flick_id=get_configured_flick_id(),
         dot_ids=parse_dot_ids(config.get("dot_ids")),
         input_dir=get_input_storage_dir(),
         output_dir=get_output_storage_dir(),

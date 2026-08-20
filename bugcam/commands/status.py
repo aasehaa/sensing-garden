@@ -6,6 +6,7 @@ import platform
 from pathlib import Path
 from rich.console import Console
 from ..settings import (
+    get_configured_flick_id,
     get_edge26_labels_path,
     get_edge26_model_path,
     get_input_storage_dir,
@@ -214,7 +215,7 @@ def _print_device_row(name: str, value: str) -> None:
 
 def _print_device_section() -> bool:
     config = load_config()
-    flick_id = str(config.get("flick_id") or config.get("device_id") or "").strip()
+    flick_id = get_configured_flick_id()
     dot_ids = parse_dot_ids(config.get("dot_ids"))
     api_url = str(config.get("api_url") or "").strip()
     registered = bool(flick_id and api_url and str(config.get("api_key") or "").strip())

@@ -10,7 +10,7 @@ from typing import Any
 import typer
 from rich.console import Console
 
-from bugcam.settings import get_input_storage_dir, get_output_storage_dir, load_config, parse_dot_ids
+from bugcam.settings import get_configured_flick_id, get_input_storage_dir, get_output_storage_dir, load_config, parse_dot_ids
 
 app = typer.Typer(help="Write a heartbeat snapshot", invoke_without_command=True, no_args_is_help=False)
 console = Console()
@@ -164,7 +164,7 @@ def _resolve_runtime_settings(
     dot_ids: str | None,
 ) -> dict[str, Any]:
     config = load_config()
-    resolved_flick_id = flick_id or str(config.get("flick_id") or config.get("device_id") or "")
+    resolved_flick_id = flick_id or get_configured_flick_id()
     resolved_dot_ids = parse_dot_ids(dot_ids) if dot_ids is not None else parse_dot_ids(config.get("dot_ids"))
 
     missing_fields = [

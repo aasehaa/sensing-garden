@@ -16,11 +16,11 @@ from ..settings import (
     DEFAULT_API_URL,
     DEFAULT_S3_BUCKET,
     build_dot_ids,
-    get_default_flick_id,
     get_hailo_venv_dir,
     get_python_for_detection,
     get_state_dir,
     load_config,
+    load_device_config,
     save_config,
 )
 
@@ -170,7 +170,9 @@ def _install_hailo_environment() -> None:
 
 
 def _existing_flick_id(existing_config: dict[str, Any]) -> str:
-    return str(existing_config.get("flick_id") or existing_config.get("device_id") or get_default_flick_id())
+    # existing_config is always the same dict load_config() would return here
+    # (see call sites), so this matches load_device_config().flick_id exactly.
+    return load_device_config().flick_id
 
 
 def _existing_dot_count(existing_config: dict[str, Any]) -> int:

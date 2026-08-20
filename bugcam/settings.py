@@ -230,6 +230,21 @@ def build_dot_ids(flick_id: str, dot_count: int) -> list[str]:
     return [f"{flick_id}-dot{index:02d}" for index in range(1, dot_count + 1)]
 
 
+def get_configured_flick_id() -> str:
+    """Read flick_id straight from persisted config, with no default applied.
+
+    Returns "" if the device has never been configured. Unlike
+    load_device_config()/resolve_flick_id() (which always resolve to a
+    working ID, defaulting to get_default_flick_id()), this is for callers
+    that need to tell the difference between "configured" and "not" --
+    e.g. `bugcam status`/`dot-info`/`heartbeat` reporting or refusing to run
+    on an unregistered device, rather than silently operating as the
+    default device.
+    """
+    config = load_config()
+    return str(config.get("flick_id") or config.get("device_id") or "").strip()
+
+
 def load_device_config() -> DeviceConfig:
     """Load persisted device config with defaults applied."""
     config = load_config()
