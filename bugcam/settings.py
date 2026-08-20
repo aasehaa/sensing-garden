@@ -231,18 +231,22 @@ def build_dot_ids(flick_id: str, dot_count: int) -> list[str]:
 
 
 def get_configured_flick_id() -> str:
-    """Read flick_id straight from persisted config, with no default applied.
+    """The explicitly configured flick_id -- persisted config or the
+    BUGCAM_FLICK_ID env var -- with no further default applied.
 
-    Returns "" if the device has never been configured. Unlike
+    Returns "" only when neither is set, i.e. resolve_flick_id() would fall
+    all the way back to the hardcoded literal default ("bugcam-rpi"). Unlike
     load_device_config()/resolve_flick_id() (which always resolve to a
-    working ID, defaulting to get_default_flick_id()), this is for callers
-    that need to tell the difference between "configured" and "not" --
-    e.g. `bugcam status`/`dot-info`/`heartbeat` reporting or refusing to run
-    on an unregistered device, rather than silently operating as the
-    default device.
+    working ID), this is for callers that need to tell "configured" apart
+    from "not" -- e.g. `bugcam status`/`dot-info`/`heartbeat` reporting, or
+    `run`/`process`/`record` refusing to operate as the default device on an
+    unconfigured install.
     """
     config = load_config()
-    return str(config.get("flick_id") or config.get("device_id") or "").strip()
+    configured = str(config.get("flick_id") or config.get("device_id") or "").strip()
+    if configured:
+        return configured
+    return os.environ.get("BUGCAM_FLICK_ID", "").strip()
 
 
 def load_device_config() -> DeviceConfig:

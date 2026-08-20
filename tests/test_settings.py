@@ -40,10 +40,31 @@ def test_load_device_config_falls_back_to_legacy_device_id(tmp_path: Path, monke
 
 def test_get_configured_flick_id_empty_when_unconfigured(tmp_path: Path, monkeypatch) -> None:
     """Unlike load_device_config()/resolve_flick_id(), this must never default --
-    callers (status/dot-info/heartbeat) rely on "" meaning 'not configured'."""
+    callers (status/dot-info/heartbeat, and run/process/record/environment's
+    fail-fast guard) rely on "" meaning 'not configured'."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("BUGCAM_FLICK_ID", raising=False)
 
     assert get_configured_flick_id() == ""
+
+
+def test_get_configured_flick_id_reads_env_var(tmp_path: Path, monkeypatch) -> None:
+    """A device configured purely via BUGCAM_FLICK_ID (no config.json, e.g. a
+    fleet deployed through systemd env files) counts as configured."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("BUGCAM_FLICK_ID", "flick-env")
+
+    assert get_configured_flick_id() == "flick-env"
+
+
+def test_get_configured_flick_id_prefers_persisted_config_over_env_var(tmp_path: Path, monkeypatch) -> None:
+    config_dir = tmp_path / ".config" / "bugcam"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"flick_id": "flick-config"}', encoding="utf-8")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("BUGCAM_FLICK_ID", "flick-env")
+
+    assert get_configured_flick_id() == "flick-config"
 
 
 def test_get_configured_flick_id_reads_persisted_value(tmp_path: Path, monkeypatch) -> None:

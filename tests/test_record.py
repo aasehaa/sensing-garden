@@ -115,7 +115,8 @@ def test_record_single_low_disk_space_exits(cli_runner: CliRunner, tmp_path: Pat
         result = cli_runner.invoke(app, [
             "record", "single",
             "--output", str(output_file),
-            "--length", "10"
+            "--length", "10",
+            "--flick-id", "flick-test",
         ])
         assert result.exit_code == 1
         assert "Insufficient disk space" in result.output
@@ -133,7 +134,7 @@ def test_record_single_uses_resolved_flick_id_for_generated_filename(tmp_path: P
         with patch('bugcam.commands.record.platform.system', return_value='Linux'), \
              patch('bugcam.commands.record._check_camera_available', return_value=True), \
              patch('bugcam.commands.record._check_disk_space', return_value=(True, 1000)), \
-             patch('bugcam.commands.record.resolve_flick_id', return_value='flick-config'), \
+             patch('bugcam.commands.record.require_configured_flick_id', return_value='flick-config'), \
              patch('bugcam.commands.record._remux_video', return_value=True), \
              patch('bugcam.commands.record._record_single_video') as mock_record:
             mock_record.side_effect = lambda output, length, quiet, resolution: captured.setdefault("name", output.name) or True

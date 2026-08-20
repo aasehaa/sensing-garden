@@ -27,9 +27,8 @@ from bugcam.settings import (
     load_config,
     log_startup_config,
     parse_dot_ids,
-    resolve_flick_id,
 )
-from bugcam.commands import parse_resolution_option
+from bugcam.commands import parse_resolution_option, require_configured_flick_id
 from bugcam.commands.status import _check_time_sync
 from bugcam.environment_sensor import collect_environment_reading
 from bugcam.record_window import RecordingWindow
@@ -211,7 +210,7 @@ def _resolve_runtime_settings(
     config = load_config()
     resolved_api_url = api_url or str(config.get("api_url") or DEFAULT_API_URL)
     resolved_api_key = api_key or str(config.get("api_key") or "")
-    resolved_flick_id = resolve_flick_id(flick_id)
+    resolved_flick_id = require_configured_flick_id(flick_id)
     resolved_dot_ids = parse_dot_ids(dot_ids) if dot_ids is not None else parse_dot_ids(config.get("dot_ids"))
     resolved_bucket = bucket or str(config.get("s3_bucket") or DEFAULT_S3_BUCKET)
 
@@ -226,8 +225,6 @@ def _resolve_runtime_settings(
     if missing_fields and enable_upload:
         joined = ", ".join(missing_fields)
         raise typer.BadParameter(f"Missing required config values: {joined}. Run `bugcam setup` or pass CLI flags.")
-    if not resolved_flick_id:
-        raise typer.BadParameter("Missing flick_id. Run `bugcam setup` or pass --flick-id.")
 
     return {
         "api_url": resolved_api_url.rstrip("/"),

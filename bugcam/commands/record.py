@@ -9,8 +9,8 @@ from pathlib import Path
 from datetime import datetime
 from rich.console import Console
 from typing import Optional
-from ..settings import get_input_storage_dir, resolve_flick_id
-from . import parse_resolution_option
+from ..settings import get_input_storage_dir
+from . import parse_resolution_option, require_configured_flick_id
 
 app = typer.Typer(help="Record videos from camera")
 console = Console()
@@ -145,7 +145,7 @@ def single(
         console.print("[red]Camera not accessible[/red]")
         raise typer.Exit(1)
     parsed_resolution = parse_resolution_option(resolution)
-    resolved_flick_id = resolve_flick_id(flick_id)
+    resolved_flick_id = require_configured_flick_id(flick_id)
 
     # Generate output path if not specified
     if output is None:
