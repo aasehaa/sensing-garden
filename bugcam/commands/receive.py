@@ -7,22 +7,12 @@ from rich.console import Console
 
 from ..receiver import create_app
 from ..receiver.config import RECEIVER_DEFAULT_PORT, RECEIVER_DEFAULT_HOST
-from ..receiver.tracker import PendingTrackTracker
+from ..receiver.tracker import finalization_loop
 
 app = typer.Typer(help="Manage DOT data receiver server")
 console = Console()
 
 logger = logging.getLogger(__name__)
-
-
-def finalization_loop(tracker: PendingTrackTracker, stop_event: threading.Event):
-    """Background thread that checks for idle tracks to finalize."""
-    while not stop_event.is_set():
-        try:
-            tracker.check_pending()
-        except Exception as e:
-            logger.error(f"Finalization loop error: {e}")
-        stop_event.wait(PendingTrackTracker.CHECK_INTERVAL)
 
 
 @app.command("start")

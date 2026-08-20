@@ -36,7 +36,7 @@ from bugcam.record_window import RecordingWindow
 from bugcam.runtime import build_pipeline, resolve_bundle_provenance, select_model_reference
 from bugcam.receiver import create_app
 from bugcam.receiver.config import RECEIVER_DEFAULT_PORT, RECEIVER_DEFAULT_HOST
-from bugcam.receiver.tracker import PendingTrackTracker
+from bugcam.receiver.tracker import finalization_loop
 
 app = typer.Typer(help="Record, process, upload, and emit heartbeats", invoke_without_command=True, no_args_is_help=False)
 console = Console()
@@ -187,7 +187,7 @@ def _receiver_loop(
 
         finalization_stop = threading.Event()
         finalization_thread = threading.Thread(
-            target=_finalization_loop,
+            target=finalization_loop,
             args=(tracker, finalization_stop),
             daemon=True
         )
@@ -200,16 +200,6 @@ def _receiver_loop(
     if tracker and finalization_thread:
         finalization_stop.set()
         finalization_thread.join(timeout=5)
-
-
-def _finalization_loop(tracker: PendingTrackTracker, stop_event: threading.Event):
-    """Background thread that checks for idle tracks to finalize."""
-    while not stop_event.is_set():
-        try:
-            tracker.check_pending()
-        except Exception as e:
-            logger.error(f"Finalization loop error: {e}")
-        stop_event.wait(PendingTrackTracker.CHECK_INTERVAL)
 
 
 def _resolve_runtime_settings(

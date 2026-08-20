@@ -24,10 +24,6 @@ def _build_recording_path(output_dir: Path, flick_id: str) -> Path:
     return output_dir / f"{flick_id}_{timestamp}.mp4"
 
 
-def _resolve_recording_flick_id(flick_id: Optional[str]) -> str:
-    return resolve_flick_id(flick_id)
-
-
 def _check_disk_space(output_dir: Path, min_free_mb: int = 300) -> tuple[bool, int]:
     """Check if output directory has sufficient free disk space.
 
@@ -149,7 +145,7 @@ def single(
         console.print("[red]Camera not accessible[/red]")
         raise typer.Exit(1)
     parsed_resolution = parse_resolution_option(resolution)
-    resolved_flick_id = _resolve_recording_flick_id(flick_id)
+    resolved_flick_id = resolve_flick_id(flick_id)
 
     # Generate output path if not specified
     if output is None:
