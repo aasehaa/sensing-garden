@@ -6,11 +6,9 @@ Pollen (kind="capture" -> v1/<device>/captures/<ts>.json), so with batching it
 rides the per-device tar next to the results it describes.
 """
 import json
-import queue
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from bugcam.capture_report import CaptureLog
 from bugcam.pollen.pollen import Pollen, PollenConfig
@@ -288,6 +286,10 @@ class TestCaptureReportLoop:
 
 
 class TestRecorderNotifiesChunkComplete:
+    """_notify_chunk_complete is the shared callback-reporting step used by
+    every recording path; tested directly rather than by driving a full
+    chunk recording, since which recording path calls it is irrelevant here."""
+
     def _recorder(self, tmp_path, callback):
         from bugcam.edge26.recorder import VideoRecorder
 
@@ -300,41 +302,19 @@ class TestRecorderNotifiesChunkComplete:
             on_chunk_complete=callback,
         )
 
-    def test_record_chunk_reports_path_and_measured_duration(self, tmp_path):
+    def test_notify_chunk_complete_reports_path_and_duration(self, tmp_path):
         seen = []
         recorder = self._recorder(tmp_path, lambda path, duration: seen.append((path, duration)))
-        recorder.resolution = (64, 64)
-        recorder.frame_queue = queue.Queue()
-        recorder.frame_queue.put("frame1")
-        recorder.frame_queue.put("frame2")
+        chunk_path = tmp_path / "chunk.mp4"
 
-        def fake_writer(path, *args, **kwargs):
-            writer = MagicMock()
-            writer.isOpened.return_value = True
-            writer.release.side_effect = lambda: Path(path).write_bytes(b"v")
-            return writer
+        recorder._notify_chunk_complete(chunk_path, 1.0)
 
-        with patch("bugcam.edge26.recorder.cv2.VideoWriter", side_effect=fake_writer):
-            chunk_path = recorder._record_chunk()
-
-        assert chunk_path is not None
-        assert seen == [(chunk_path, 1.0)]  # 2 frames @ 2 fps
+        assert seen == [(chunk_path, 1.0)]
 
     def test_callback_failure_does_not_break_recording(self, tmp_path):
         def boom(path, duration):
             raise RuntimeError("consumer bug")
 
         recorder = self._recorder(tmp_path, boom)
-        recorder.resolution = (64, 64)
-        recorder.frame_queue = queue.Queue()
-        recorder.frame_queue.put("frame1")
-        recorder.frame_queue.put("frame2")
 
-        def fake_writer(path, *args, **kwargs):
-            writer = MagicMock()
-            writer.isOpened.return_value = True
-            writer.release.side_effect = lambda: Path(path).write_bytes(b"v")
-            return writer
-
-        with patch("bugcam.edge26.recorder.cv2.VideoWriter", side_effect=fake_writer):
-            assert recorder._record_chunk() is not None  # chunk still completes
+        recorder._notify_chunk_complete(tmp_path / "chunk.mp4", 1.0)  # must not raise

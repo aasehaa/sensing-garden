@@ -364,7 +364,7 @@ def run(
     chunk_duration: int = typer.Option(60, "--chunk-duration", help="Length of each recorded chunk in seconds"),
     fps: int = typer.Option(30, "--fps", help="Recording frame rate"),
     resolution: str = typer.Option("1080x1080", "--resolution", help="Recording resolution in WxH format"),
-    bitrate: int = typer.Option(20_000_000, "--bitrate", help="H.264 encoder bitrate in bps (hardware encoding only)"),
+    bitrate: int = typer.Option(20_000_000, "--bitrate", help="H.264 encoder bitrate in bps"),
     bucket: str | None = typer.Option(None, "--bucket", help="Configured output bucket"),
     upload_poll: int = typer.Option(3600, "--upload-poll", help="Seconds between upload polls; with --archive-batch this is also the batch cadence (one tar per device per poll) (config: upload_poll_interval)"),
     heartbeat_interval: float | None = typer.Option(None, "--heartbeat-interval", help="Seconds between heartbeat snapshots (config: heartbeat_interval, default 300)"),

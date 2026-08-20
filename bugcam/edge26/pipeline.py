@@ -285,8 +285,6 @@ class Pipeline:
             resolution=tuple(capture.get("resolution", [1080, 1080])),
             device_id=self.flick_id,
             video_queue=self.video_queue,
-            camera_index=capture["camera_index"],
-            use_picamera=capture["use_picamera"],
             recording_mode=pipeline_cfg.get("recording_mode", "continuous"),
             interval_minutes=pipeline_cfg.get("recording_interval_minutes", 5),
             bitrate=capture.get("bitrate", 20_000_000),

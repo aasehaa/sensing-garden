@@ -223,8 +223,6 @@ def build_edge26_config(
             "random_sampling": random_sampling,
         },
         "capture": {
-            "camera_index": 0,
-            "use_picamera": True,
             "fps": fps,
             "chunk_duration_seconds": chunk_duration,
             "resolution": list(resolution),
