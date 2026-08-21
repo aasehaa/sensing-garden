@@ -1,39 +1,56 @@
-"""Upload local files to the sg-unprocessed S3 bucket, marking each as uploaded.
+"""Upload local raw files via the backend's presigned-URL API, marking each as uploaded.
 
 Dev-only utility. This module is not part of the device runtime path.
+
+Auth
+----
+Devices in the field carry a sensing-garden ``api_key`` but no AWS credentials, so
+this does not talk to S3 directly. It requests a presigned PUT URL from the backend
+(the same ``/upload-url`` endpoint and ``Presigner`` Pollen already uses in
+production) and PUTs the file to that URL. Uploads land in the production bucket
+under ``v1/<device_id>/raw/<filename>`` -- a key shape the backend's existing
+per-device scope check already accepts, so no backend changes are needed.
+
+There is no backend endpoint to check whether an object actually exists in S3 via
+api_key (no HEAD/GET presign route) -- unlike a raw-boto3 uploader, this cannot
+independently verify an upload after the fact. A file counts as uploaded once the
+presigned PUT returns success; there is no separate verify step.
 
 Spec
 ----
 Given a source directory, upload every regular file in it (non-recursive) that
-isn't already marked uploaded to the target bucket, using the file's own name
-as the S3 key. On a successful upload, the local file is renamed by appending
-the ``.uploaded`` suffix so a re-run skips it without needing a manifest.
+isn't already marked uploaded, using the file's own name as the S3 key (under the
+device/prefix namespace above). On a successful upload, the local file is renamed
+by appending the ``.uploaded`` suffix so a re-run skips it without needing a
+manifest.
+
+An optional ``min_age_seconds`` defers any file younger than that -- it may still
+be mid-write, or not yet picked up by the live capture/detection pipeline that
+also reads this directory; renaming a file out from under that pipeline before it
+has had a chance to process it would silently and permanently skip detection for
+it. Deferred files are simply skipped this run, not reported as any kind of error.
 
 An optional byte budget (``max_bytes``) caps how much data a single run will
 push: files are processed in sorted-name order, and as soon as the next file
 would push the cumulative total over the budget, that file and everything
 after it are left alone (reported as "skipped_budget") rather than uploaded.
 
-A failed upload (S3 error) leaves the local file untouched and is reported as
-"failed"; a failed post-upload rename (e.g. name collision) leaves the object
-in S3 -- which is harmless, re-running will just re-upload the same key -- and
-is reported as "uploaded_unmarked". Either way, one failure does not stop the
-rest of the batch.
-
-A separate end-of-run check (``verify_uploaded_files``) confirms that every
-file already marked ``.uploaded`` locally -- from this run or a prior one --
-really does have a matching S3 object. It only looks at ``.uploaded`` files:
-files still pending because a budget cut the run short are expected to be
-missing from S3 and are not treated as an error.
+A failed upload (presign or PUT error) leaves the local file untouched and is
+reported as "failed"; a failed post-upload rename (e.g. name collision) leaves
+the object already in S3 -- harmless, re-running will just re-upload the same
+key -- and is reported as "uploaded_unmarked". Either way, one failure does not
+stop the rest of the batch. Nothing is ever deleted.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Optional
 
-DEFAULT_UNPROCESSED_BUCKET = "sg-unprocessed"
+DEFAULT_KEY_PREFIX = "raw"
 UPLOADED_SUFFIX = ".uploaded"
+REQUEST_TIMEOUT_SECONDS = 60
 
 _SIZE_UNITS = {
     "B": 1,
@@ -86,41 +103,31 @@ def format_bytes(n: int) -> str:
     return f"{n}B"  # pragma: no cover - unreachable, satisfies type checkers
 
 
-def _normalize_prefix(prefix: str) -> str:
-    prefix = prefix.strip().strip("/")
-    return f"{prefix}/" if prefix else ""
+def build_object_key(device_id: str, filename: str, *, key_prefix: str = DEFAULT_KEY_PREFIX) -> str:
+    """Build the ``v1/<device_id>/...`` S3 key this device is authorized to write to."""
+    prefix = key_prefix.strip("/")
+    if prefix:
+        return f"v1/{device_id}/{prefix}/{filename}"
+    return f"v1/{device_id}/{filename}"
 
 
-def iter_pending_files(source_dir: Path) -> list[Path]:
-    """Return regular files in source_dir not already marked uploaded, sorted by name."""
+def iter_pending_files(source_dir: Path, *, min_age_seconds: float = 0) -> list[Path]:
+    """Return regular files in source_dir not already marked uploaded, sorted by name.
+
+    Files younger than ``min_age_seconds`` (by mtime) are excluded -- default 0
+    means no age filter, matching plain "everything pending" semantics.
+    """
+    now = time.time()
     return sorted(
-        (p for p in source_dir.iterdir() if p.is_file() and not p.name.endswith(UPLOADED_SUFFIX)),
+        (
+            p
+            for p in source_dir.iterdir()
+            if p.is_file()
+            and not p.name.endswith(UPLOADED_SUFFIX)
+            and (min_age_seconds <= 0 or (now - p.stat().st_mtime) >= min_age_seconds)
+        ),
         key=lambda p: p.name,
     )
-
-
-def bucket_exists(s3_client: Any, bucket: str) -> bool:
-    """Return True if the bucket exists and is accessible."""
-    try:
-        s3_client.head_bucket(Bucket=bucket)
-        return True
-    except Exception as exc:
-        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
-        if error_code in {"404", "403", "NoSuchBucket"}:
-            return False
-        raise
-
-
-def object_exists(s3_client: Any, bucket: str, key: str) -> bool:
-    """Return True if the object already exists in the bucket."""
-    try:
-        s3_client.head_object(Bucket=bucket, Key=key)
-        return True
-    except Exception as exc:
-        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
-        if error_code in {"404", "NoSuchKey", "NotFound"}:
-            return False
-        raise
 
 
 @dataclass(frozen=True)
@@ -134,14 +141,24 @@ class UploadResult:
     error: str | None = None
 
 
+def _default_put_file(url: str, path: Path) -> None:
+    import requests
+
+    with path.open("rb") as fh:
+        resp = requests.put(url, data=fh, timeout=REQUEST_TIMEOUT_SECONDS)
+    resp.raise_for_status()
+
+
 def upload_pending_files(
     source_dir: Path,
     *,
-    bucket: str = DEFAULT_UNPROCESSED_BUCKET,
-    prefix: str = "",
-    max_bytes: int | None = None,
+    presigner: Any = None,
+    device_id: str,
+    key_prefix: str = DEFAULT_KEY_PREFIX,
+    max_bytes: Optional[int] = None,
+    min_age_seconds: float = 0,
     dry_run: bool = False,
-    s3_client: Any = None,
+    put_file: Optional[Callable[[str, Path], None]] = None,
 ) -> list[UploadResult]:
     """Upload pending files from source_dir, renaming each on success.
 
@@ -149,17 +166,18 @@ def upload_pending_files(
     cumulative uploaded bytes past max_bytes (if set), it and every file after
     it are reported as "skipped_budget" and left untouched.
     """
-    if not dry_run and s3_client is None:
-        raise ValueError("s3_client is required unless dry_run=True")
+    if not dry_run and presigner is None:
+        raise ValueError("presigner is required unless dry_run=True")
+    if not dry_run and put_file is None:
+        put_file = _default_put_file
 
-    key_prefix = _normalize_prefix(prefix)
     results: list[UploadResult] = []
     total = 0
     budget_exhausted = False
 
-    for path in iter_pending_files(source_dir):
+    for path in iter_pending_files(source_dir, min_age_seconds=min_age_seconds):
         size = path.stat().st_size
-        key = f"{key_prefix}{path.name}"
+        key = build_object_key(device_id, path.name, key_prefix=key_prefix)
 
         if budget_exhausted or (max_bytes is not None and total + size > max_bytes):
             budget_exhausted = True
@@ -172,7 +190,8 @@ def upload_pending_files(
             continue
 
         try:
-            s3_client.upload_file(str(path), bucket, key)
+            upload_url = presigner.put_url(key)
+            put_file(upload_url, path)
         except Exception as exc:
             results.append(UploadResult(path, key, size, "failed", error=str(exc)))
             continue
@@ -189,43 +208,14 @@ def upload_pending_files(
     return results
 
 
-def verify_uploaded_files(
-    source_dir: Path,
-    *,
-    bucket: str,
-    prefix: str = "",
-    s3_client: Any,
-) -> list[Path]:
-    """Confirm every file already marked `.uploaded` has a matching S3 object.
-
-    Only files ending in UPLOADED_SUFFIX are checked -- files still pending
-    (e.g. left behind by a max_bytes budget) are not expected to be in S3 yet
-    and are not an error. Returns the local `.uploaded` paths that have NO
-    corresponding object in the bucket -- an empty list means everything this
-    run (or a prior run) marked as uploaded is actually present. This always
-    re-queries S3 rather than reusing in-memory upload results, since the goal
-    is an independent confirmation.
-    """
-    key_prefix = _normalize_prefix(prefix)
-    missing: list[Path] = []
-    for path in sorted(source_dir.iterdir(), key=lambda p: p.name):
-        if not path.is_file() or not path.name.endswith(UPLOADED_SUFFIX):
-            continue
-        original_name = path.name[: -len(UPLOADED_SUFFIX)]
-        key = f"{key_prefix}{original_name}"
-        if not object_exists(s3_client, bucket, key):
-            missing.append(path)
-    return missing
-
-
-def format_upload_summary(bucket: str, results: Iterable[UploadResult]) -> str:
+def format_upload_summary(device_id: str, key_prefix: str, results: Iterable[UploadResult]) -> str:
     """Return a human-readable summary of an upload_pending_files() run."""
     results = list(results)
     by_status: dict[str, list[UploadResult]] = {}
     for r in results:
         by_status.setdefault(r.status, []).append(r)
 
-    lines = [f"Bucket: {bucket}"]
+    lines = [f"Device: {device_id}  Destination: {build_object_key(device_id, '', key_prefix=key_prefix)}"]
     uploaded = by_status.get("uploaded", []) + by_status.get("uploaded_unmarked", [])
     if uploaded:
         total_bytes = sum(r.size for r in uploaded)
@@ -244,4 +234,5 @@ def format_upload_summary(bucket: str, results: Iterable[UploadResult]) -> str:
         lines.append(f"  failed: {len(by_status['failed'])} file(s)")
         for r in by_status["failed"]:
             lines.append(f"    - {r.path.name}: {r.error}")
+    lines.append("  (no server-side verification available for this upload path -- success means the PUT returned OK)")
     return "\n".join(lines)
