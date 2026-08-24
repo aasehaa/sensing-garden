@@ -159,12 +159,17 @@ def upload_pending_files(
     min_age_seconds: float = 0,
     dry_run: bool = False,
     put_file: Optional[Callable[[str, Path], None]] = None,
+    on_result: Optional[Callable[[UploadResult], None]] = None,
 ) -> list[UploadResult]:
     """Upload pending files from source_dir, renaming each on success.
 
     Files are processed in sorted-name order. Once the next file would push
     cumulative uploaded bytes past max_bytes (if set), it and every file after
     it are reported as "skipped_budget" and left untouched.
+
+    ``on_result``, if given, is called once per file immediately after each
+    result is known -- useful for live progress on a run that may take hours,
+    since the return value only arrives once everything is done.
     """
     if not dry_run and presigner is None:
         raise ValueError("presigner is required unless dry_run=True")
@@ -175,35 +180,40 @@ def upload_pending_files(
     total = 0
     budget_exhausted = False
 
+    def _record(result: UploadResult) -> None:
+        results.append(result)
+        if on_result is not None:
+            on_result(result)
+
     for path in iter_pending_files(source_dir, min_age_seconds=min_age_seconds):
         size = path.stat().st_size
         key = build_object_key(device_id, path.name, key_prefix=key_prefix)
 
         if budget_exhausted or (max_bytes is not None and total + size > max_bytes):
             budget_exhausted = True
-            results.append(UploadResult(path, key, size, "skipped_budget"))
+            _record(UploadResult(path, key, size, "skipped_budget"))
             continue
 
         if dry_run:
             total += size
-            results.append(UploadResult(path, key, size, "planned"))
+            _record(UploadResult(path, key, size, "planned"))
             continue
 
         try:
             upload_url = presigner.put_url(key)
             put_file(upload_url, path)
         except Exception as exc:
-            results.append(UploadResult(path, key, size, "failed", error=str(exc)))
+            _record(UploadResult(path, key, size, "failed", error=str(exc)))
             continue
 
         total += size
         try:
             path.rename(path.with_name(path.name + UPLOADED_SUFFIX))
         except OSError as exc:
-            results.append(UploadResult(path, key, size, "uploaded_unmarked", error=str(exc)))
+            _record(UploadResult(path, key, size, "uploaded_unmarked", error=str(exc)))
             continue
 
-        results.append(UploadResult(path, key, size, "uploaded"))
+        _record(UploadResult(path, key, size, "uploaded"))
 
     return results
 

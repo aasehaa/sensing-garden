@@ -26,6 +26,8 @@ from bugcam.device_config import resolve_flick_id
 from bugcam.pollen.presign import Presigner
 from bugcam.unprocessed_upload import (
     DEFAULT_KEY_PREFIX,
+    UploadResult,
+    format_bytes,
     format_upload_summary,
     parse_size,
     upload_pending_files,
@@ -94,6 +96,19 @@ def main(argv: list[str] | None = None) -> int:
 
     presigner = Presigner(api_url, api_key) if (api_url and api_key) else None
 
+    pending_count = len(
+        [p for p in source_dir.iterdir() if p.is_file() and not p.name.endswith(".uploaded")]
+    )
+    counter = {"n": 0}
+
+    def _log_progress(result: UploadResult) -> None:
+        counter["n"] += 1
+        print(
+            f"[{counter['n']}/{pending_count}] {result.status}: {result.path.name} "
+            f"({format_bytes(result.size)})" + (f" -- {result.error}" if result.error else ""),
+            flush=True,
+        )
+
     results = upload_pending_files(
         source_dir,
         presigner=presigner,
@@ -102,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         max_bytes=args.max_bytes,
         min_age_seconds=args.min_age_seconds,
         dry_run=args.dry_run,
+        on_result=_log_progress,
     )
 
     print(format_upload_summary(device_id, args.key_prefix, results))

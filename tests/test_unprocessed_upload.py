@@ -261,6 +261,23 @@ def test_upload_pending_files_min_age_seconds_defers_recent_files(tmp_path: Path
     assert (tmp_path / "new.jpg").exists()  # untouched: too fresh, might still be in-flight
 
 
+def test_upload_pending_files_on_result_fires_per_file_in_order(tmp_path: Path) -> None:
+    _make_files(tmp_path, {"a.jpg": 10, "b.jpg": 10})
+    presigner = FakePresigner(fail_keys={"v1/SGSCA11/raw/b.jpg"})
+    seen: list[tuple[str, str]] = []
+
+    results = upload_pending_files(
+        tmp_path,
+        presigner=presigner,
+        device_id="SGSCA11",
+        put_file=make_put_file(),
+        on_result=lambda r: seen.append((r.path.name, r.status)),
+    )
+
+    assert seen == [("a.jpg", "uploaded"), ("b.jpg", "failed")]
+    assert seen == [(r.path.name, r.status) for r in results]
+
+
 # --- format_upload_summary -------------------------------------------------------
 
 
