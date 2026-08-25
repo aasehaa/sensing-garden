@@ -12,6 +12,7 @@ from typing import Any
 import typer
 from rich.console import Console
 
+from bugcam import __version__
 from bugcam.capture_report import CAPTURES_SUBDIR, DEFAULT_REPORT_INTERVAL_SECONDS, CaptureLog
 from bugcam.commands.heartbeat import write_heartbeat_snapshot
 from bugcam.pollen.integration import build_pollen
@@ -24,6 +25,7 @@ from bugcam.config import (
     get_output_storage_dir,
     get_state_dir,
     load_config,
+    log_startup_config,
     parse_dot_ids,
 )
 from bugcam.commands.status import _check_time_sync
@@ -562,6 +564,16 @@ def run(
             on_log_complete=on_log_complete,
             on_video_ready=on_video_ready,
             on_chunk_recorded=capture_log.record_chunk if capture_log else None,
+        )
+        # setup_logging() ran inside build_pipeline(), so file+console handlers
+        # are live here -- this is the earliest point the full startup config
+        # (device config + detection.yaml/defaults + commit) can reach the log.
+        log_startup_config(
+            version=__version__,
+            device_config=settings,
+            detection_config=pipeline.config.get("detection", {}),
+            tracking_config=pipeline.config.get("tracking", {}),
+            detection_config_source=pipeline.config.get("detection_config_source", "unknown"),
         )
         heartbeat_stop_event = threading.Event()
         environment_stop_event = threading.Event()

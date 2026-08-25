@@ -188,11 +188,18 @@ def build_edge26_config(
         detection_overrides, tracking_overrides = loaded_config
         detection_config = detection_overrides
         tracking_config = tracking_overrides
+        detection_config_source = str(config_path)
     else:
         detection_config = dict(EDGE26_DETECTION_DEFAULTS)
         tracking_config = dict(EDGE26_TRACKING_DEFAULTS)
+        detection_config_source = (
+            f"hardcoded defaults (empty or unreadable: {config_path})"
+            if config_path is not None
+            else "hardcoded defaults (no detection.yaml found)"
+        )
 
     return {
+        "detection_config_source": detection_config_source,
         "device": {
             "flick_id": flick_id,
             "dot_ids": dot_ids,

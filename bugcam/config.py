@@ -1,7 +1,9 @@
 """Shared configuration utilities for bugcam."""
 import json
+import logging
 import os
 import platform
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -9,10 +11,11 @@ from typing import Any
 from rich.console import Console
 
 console = Console()
-
+logger = logging.getLogger("bugcam.startup")
 
 DEFAULT_API_URL = "https://api.sensinggarden.com/v1"
 DEFAULT_S3_BUCKET = "scl-sensing-garden"
+REDACTED_VALUE = "***redacted***"
 
 
 def get_config_path() -> Path:
@@ -208,3 +211,85 @@ def is_edge26_continuous_tracking_enabled() -> bool:
     """Return whether edge26 continuous tracking is enabled."""
     value = os.environ.get("BUGCAM_EDGE26_CONTINUOUS_TRACKING", "0").lower()
     return value not in {"0", "false", "no"}
+
+
+def get_source_commit() -> str | None:
+    """Best-effort short git commit hash of the running source tree.
+
+    Returns None when the installed package is not a git checkout (the
+    common case for `pip install bugcam` / `pipx install bugcam` from
+    PyPI) or when git itself is unavailable.
+    """
+    try:
+        import bugcam
+        package_dir = Path(bugcam.__file__).resolve().parent
+    except Exception:
+        return None
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(package_dir), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    if result.returncode != 0:
+        return None
+    commit = result.stdout.strip()
+    return commit or None
+
+
+def redact_device_config(device_config: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of a device/runtime settings dict safe to write to logs.
+
+    api_key is the only secret that ever flows through this dict; every
+    other field (flick_id, dot_ids, api_url, s3_bucket, ...) is left as-is
+    since reconstructing the running config is the entire point of logging it.
+    """
+    redacted = dict(device_config)
+    if redacted.get("api_key"):
+        redacted["api_key"] = REDACTED_VALUE
+    return redacted
+
+
+def log_startup_config(
+    *,
+    version: str,
+    device_config: dict[str, Any],
+    detection_config: dict[str, Any],
+    tracking_config: dict[str, Any],
+    detection_config_source: str,
+) -> None:
+    """Log the fully-resolved configuration once at process startup.
+
+    A device's daily log is often the only artifact available when triaging
+    a detection issue after the fact, so it must contain enough to
+    reconstruct exactly what the device was running: the detection.yaml (or
+    hardcoded defaults) actually loaded, the resolved device config, and --
+    when the running install is a git checkout -- the commit it was built
+    from.
+
+    Best-effort end to end: an exception anywhere in this function is caught
+    and logged rather than propagated, so a startup-logging bug can never
+    take down the run itself.
+    """
+    try:
+        try:
+            commit = get_source_commit()
+        except Exception:
+            commit = None
+
+        logger.info("=" * 60)
+        logger.info("STARTUP CONFIGURATION")
+        logger.info("=" * 60)
+        logger.info("Version: bugcam %s (commit %s)", version, commit or "unavailable")
+        logger.info("Device config: %s", redact_device_config(device_config))
+        logger.info("Detection config source: %s", detection_config_source)
+        logger.info("Detection config: %s", detection_config)
+        logger.info("Tracking config: %s", tracking_config)
+    except Exception:
+        logger.warning("Failed to log startup configuration", exc_info=True)
