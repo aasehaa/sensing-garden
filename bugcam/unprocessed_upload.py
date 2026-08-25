@@ -30,6 +30,12 @@ also reads this directory; renaming a file out from under that pipeline before i
 has had a chance to process it would silently and permanently skip detection for
 it. Deferred files are simply skipped this run, not reported as any kind of error.
 
+On a live ``input_dir``, a file discovered as pending can still be consumed
+(read + deleted) by the concurrent capture/detection pipeline before we get to
+it -- that's expected behavior on a directory we don't own exclusively, not an
+error. Such a file is reported as "vanished" and the batch continues; nothing
+is lost since the pipeline processed it itself.
+
 An optional byte budget (``max_bytes``) caps how much data a single run will
 push: files are processed in sorted-name order, and as soon as the next file
 would push the cumulative total over the budget, that file and everything
@@ -137,7 +143,7 @@ class UploadResult:
     path: Path
     key: str
     size: int
-    status: str  # "uploaded" | "uploaded_unmarked" | "skipped_budget" | "failed" | "planned"
+    status: str  # "uploaded" | "uploaded_unmarked" | "skipped_budget" | "vanished" | "failed" | "planned"
     error: str | None = None
 
 
@@ -186,7 +192,15 @@ def upload_pending_files(
             on_result(result)
 
     for path in iter_pending_files(source_dir, min_age_seconds=min_age_seconds):
-        size = path.stat().st_size
+        # source_dir may be a live pipeline's input_dir: a file listed here can be
+        # consumed (and deleted) by that pipeline before we get to it. That's
+        # expected on a live directory, not our error -- record it and move on
+        # rather than letting the whole batch die on one vanished file.
+        try:
+            size = path.stat().st_size
+        except FileNotFoundError:
+            _record(UploadResult(path, "", 0, "vanished"))
+            continue
         key = build_object_key(device_id, path.name, key_prefix=key_prefix)
 
         if budget_exhausted or (max_bytes is not None and total + size > max_bytes):
@@ -202,6 +216,11 @@ def upload_pending_files(
         try:
             upload_url = presigner.put_url(key)
             put_file(upload_url, path)
+        except FileNotFoundError:
+            # Same race as above, just a later window (vanished between stat()
+            # and the PUT itself opening the file).
+            _record(UploadResult(path, key, size, "vanished"))
+            continue
         except Exception as exc:
             _record(UploadResult(path, key, size, "failed", error=str(exc)))
             continue
@@ -240,6 +259,11 @@ def format_upload_summary(device_id: str, key_prefix: str, results: Iterable[Upl
         )
     if "skipped_budget" in by_status:
         lines.append(f"  skipped (over budget): {len(by_status['skipped_budget'])} file(s)")
+    if "vanished" in by_status:
+        lines.append(
+            f"  vanished (consumed by the live pipeline before we got to it -- not an error): "
+            f"{len(by_status['vanished'])} file(s)"
+        )
     if "failed" in by_status:
         lines.append(f"  failed: {len(by_status['failed'])} file(s)")
         for r in by_status["failed"]:

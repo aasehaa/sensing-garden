@@ -239,6 +239,30 @@ def test_upload_pending_files_continues_after_failure(tmp_path: Path) -> None:
     assert by_name["b.jpg"] == "uploaded"
 
 
+def test_upload_pending_files_vanished_file_does_not_abort_batch(tmp_path, monkeypatch) -> None:
+    # Simulates a live-pipeline race: a.jpg is discovered as pending (listed by
+    # iter_pending_files) but is deleted by the concurrent capture/detection
+    # process before we get to processing it -- expected behavior on a live
+    # input_dir, not an error, and must not kill the rest of the batch.
+    _make_files(tmp_path, {"b.jpg": 10})
+    vanished = tmp_path / "a.jpg"  # never created on disk
+
+    import bugcam.unprocessed_upload as uu
+
+    real_iter = uu.iter_pending_files
+    monkeypatch.setattr(uu, "iter_pending_files", lambda *a, **kw: [vanished, *real_iter(*a, **kw)])
+
+    presigner = FakePresigner()
+    results = upload_pending_files(
+        tmp_path, presigner=presigner, device_id="SGSCA11", put_file=make_put_file()
+    )
+    by_name = {r.path.name: r.status for r in results}
+
+    assert by_name["a.jpg"] == "vanished"
+    assert by_name["b.jpg"] == "uploaded"
+    assert (tmp_path / f"b.jpg{UPLOADED_SUFFIX}").exists()
+
+
 def test_upload_pending_files_requires_presigner_unless_dry_run(tmp_path: Path) -> None:
     _make_files(tmp_path, {"a.jpg": 10})
     with pytest.raises(ValueError):
