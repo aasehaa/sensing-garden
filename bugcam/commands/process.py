@@ -6,7 +6,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from bugcam.config import get_input_storage_dir, get_output_storage_dir
+from bugcam import __version__
+from bugcam.config import get_input_storage_dir, get_output_storage_dir, log_startup_config
 from bugcam.device_config import load_device_config, resolve_flick_id
 from bugcam.runtime import build_pipeline, resolve_bundle_provenance
 
@@ -43,6 +44,22 @@ def process(
         enable_classification=classification,
         continuous_tracking=continuous_tracking,
         detection_config_path=detection_config,
+    )
+    # setup_logging() ran inside build_pipeline(); handlers are live here.
+    # Built from attributes (not dataclasses.asdict) so it also accepts a
+    # mocked device_config in tests, not just a real DeviceConfig instance.
+    log_startup_config(
+        version=__version__,
+        device_config={
+            "api_url": device_config.api_url,
+            "api_key": device_config.api_key,
+            "s3_bucket": device_config.s3_bucket,
+            "flick_id": resolved_flick_id,
+            "dot_ids": device_config.dot_ids,
+        },
+        detection_config=pipeline.config.get("detection", {}),
+        tracking_config=pipeline.config.get("tracking", {}),
+        detection_config_source=pipeline.config.get("detection_config_source", "unknown"),
     )
     pipeline.start()
     pipeline.wait()
