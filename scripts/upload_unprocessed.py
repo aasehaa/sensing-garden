@@ -71,6 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--dry-run", action="store_true", help="Print what would be uploaded, without uploading")
+    parser.add_argument(
+        "--delete-after-upload",
+        action="store_true",
+        help=(
+            "Delete the local file once uploaded instead of renaming it .uploaded. "
+            "No local record is kept, so use only when the source data is expendable "
+            "once in S3 -- default is the safer rename-based behavior."
+        ),
+    )
     return parser
 
 
@@ -118,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         min_age_seconds=args.min_age_seconds,
         dry_run=args.dry_run,
         on_result=_log_progress,
+        delete_after_upload=args.delete_after_upload,
     )
 
     print(format_upload_summary(device_id, args.key_prefix, results))

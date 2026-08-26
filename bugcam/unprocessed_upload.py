@@ -166,6 +166,7 @@ def upload_pending_files(
     dry_run: bool = False,
     put_file: Optional[Callable[[str, Path], None]] = None,
     on_result: Optional[Callable[[UploadResult], None]] = None,
+    delete_after_upload: bool = False,
 ) -> list[UploadResult]:
     """Upload pending files from source_dir, renaming each on success.
 
@@ -176,6 +177,13 @@ def upload_pending_files(
     ``on_result``, if given, is called once per file immediately after each
     result is known -- useful for live progress on a run that may take hours,
     since the return value only arrives once everything is done.
+
+    ``delete_after_upload``, if True, removes the local file on a successful
+    upload instead of the default rename-to-``.uploaded``. There is then no
+    local record of what's been uploaded, so a re-run cannot skip already-sent
+    files by name -- only use this when the source data is expendable once in
+    S3 (e.g. deliberately clearing local disk space after independently
+    verifying uploads landed). Off by default: renaming is the safe choice.
     """
     if not dry_run and presigner is None:
         raise ValueError("presigner is required unless dry_run=True")
@@ -226,6 +234,18 @@ def upload_pending_files(
             continue
 
         total += size
+
+        if delete_after_upload:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass  # already gone (e.g. the live pipeline raced us to it) -- fine, that's the goal
+            except OSError as exc:
+                _record(UploadResult(path, key, size, "uploaded_unmarked", error=str(exc)))
+                continue
+            _record(UploadResult(path, key, size, "uploaded"))
+            continue
+
         try:
             path.rename(path.with_name(path.name + UPLOADED_SUFFIX))
         except OSError as exc:

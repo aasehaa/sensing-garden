@@ -239,6 +239,49 @@ def test_upload_pending_files_continues_after_failure(tmp_path: Path) -> None:
     assert by_name["b.jpg"] == "uploaded"
 
 
+def test_upload_pending_files_delete_after_upload_removes_instead_of_renaming(tmp_path: Path) -> None:
+    _make_files(tmp_path, {"a.jpg": 10})
+    presigner = FakePresigner()
+
+    results = upload_pending_files(
+        tmp_path, presigner=presigner, device_id="SGSCA11", put_file=make_put_file(), delete_after_upload=True
+    )
+
+    assert results[0].status == "uploaded"
+    assert not (tmp_path / "a.jpg").exists()
+    assert not (tmp_path / f"a.jpg{UPLOADED_SUFFIX}").exists()  # nothing left behind at all
+
+
+def test_upload_pending_files_delete_after_upload_failure_still_leaves_file_untouched(tmp_path: Path) -> None:
+    _make_files(tmp_path, {"a.jpg": 10})
+    presigner = FakePresigner(fail_keys={"v1/SGSCA11/raw/a.jpg"})
+
+    results = upload_pending_files(
+        tmp_path, presigner=presigner, device_id="SGSCA11", put_file=make_put_file(), delete_after_upload=True
+    )
+
+    assert results[0].status == "failed"
+    assert (tmp_path / "a.jpg").exists()  # untouched, left for a retry
+
+
+def test_upload_pending_files_delete_after_upload_already_gone_is_not_an_error(tmp_path: Path) -> None:
+    # Race: the live pipeline deletes the file itself right after our successful
+    # PUT, before our own unlink() runs. The end state (file gone) is what we
+    # wanted anyway -- not a failure.
+    _make_files(tmp_path, {"a.jpg": 10})
+    presigner = FakePresigner()
+
+    def put_file_then_delete(url: str, path: Path) -> None:
+        path.unlink()  # simulate the live pipeline winning the race
+
+    results = upload_pending_files(
+        tmp_path, presigner=presigner, device_id="SGSCA11", put_file=put_file_then_delete, delete_after_upload=True
+    )
+
+    assert results[0].status == "uploaded"
+    assert not (tmp_path / "a.jpg").exists()
+
+
 def test_upload_pending_files_vanished_file_does_not_abort_batch(tmp_path, monkeypatch) -> None:
     # Simulates a live-pipeline race: a.jpg is discovered as pending (listed by
     # iter_pending_files) but is deleted by the concurrent capture/detection
