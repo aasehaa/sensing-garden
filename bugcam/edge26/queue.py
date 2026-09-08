@@ -225,5 +225,5 @@ class ClassificationQueue:
 
 def get_pending_dir() -> Path:
     """Get the pending classification queue directory."""
-    from bugcam.config import get_state_dir
+    from bugcam.settings import get_state_dir
     return get_state_dir() / "pending"

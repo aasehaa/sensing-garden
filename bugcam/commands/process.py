@@ -7,9 +7,14 @@ import typer
 from rich.console import Console
 
 from bugcam import __version__
-from bugcam.config import get_input_storage_dir, get_output_storage_dir, log_startup_config
-from bugcam.device_config import load_device_config, resolve_flick_id
+from bugcam.settings import (
+    get_input_storage_dir,
+    get_output_storage_dir,
+    load_device_config,
+    log_startup_config,
+)
 from bugcam.runtime import build_pipeline, resolve_bundle_provenance
+from bugcam.commands import require_configured_flick_id
 
 app = typer.Typer(help="Process existing files with edge26", invoke_without_command=True, no_args_is_help=False)
 console = Console()
@@ -27,7 +32,7 @@ def process(
 ) -> None:
     """Process existing files without recording."""
     device_config = load_device_config()
-    resolved_flick_id = resolve_flick_id(flick_id)
+    resolved_flick_id = require_configured_flick_id(flick_id)
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     provenance = resolve_bundle_provenance(model)

@@ -123,3 +123,17 @@ class PendingTrackTracker:
                         logger.error(f"Failed to recover {track_dir.name}: {e}")
         if recovered:
             logger.info(f"Recovered {recovered} orphaned track(s)")
+
+
+def finalization_loop(tracker: PendingTrackTracker, stop_event: threading.Event) -> None:
+    """Background thread that checks for idle tracks to finalize.
+
+    Shared by both `bugcam run` (receiver embedded alongside the pipeline)
+    and `bugcam receive start` (standalone receiver server).
+    """
+    while not stop_event.is_set():
+        try:
+            tracker.check_pending()
+        except Exception as e:
+            logger.error(f"Finalization loop error: {e}")
+        stop_event.wait(PendingTrackTracker.CHECK_INTERVAL)

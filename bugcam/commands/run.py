@@ -18,7 +18,7 @@ from bugcam.commands.heartbeat import write_heartbeat_snapshot
 from bugcam.pollen.integration import build_pollen
 from bugcam.edge26.result_publish import publish_result_dir
 from bugcam.pollen.transport import DEFAULT_MULTIPART_THRESHOLD, DEFAULT_PART_SIZE
-from bugcam.config import (
+from bugcam.settings import (
     DEFAULT_API_URL,
     DEFAULT_S3_BUCKET,
     get_input_storage_dir,
@@ -28,15 +28,13 @@ from bugcam.config import (
     log_startup_config,
     parse_dot_ids,
 )
+from bugcam.commands import parse_resolution_option, require_configured_flick_id
 from bugcam.commands.status import _check_time_sync
-from bugcam.device_config import resolve_flick_id
 from bugcam.environment_sensor import collect_environment_reading
-from bugcam.processing import parse_capture_resolution
 from bugcam.record_window import RecordingWindow
 from bugcam.runtime import build_pipeline, resolve_bundle_provenance, select_model_reference
-from bugcam.receiver import create_app
+from bugcam.receiver import create_app, start_tracker_finalization
 from bugcam.receiver.config import RECEIVER_DEFAULT_PORT, RECEIVER_DEFAULT_HOST
-from bugcam.receiver.tracker import PendingTrackTracker
 
 app = typer.Typer(help="Record, process, upload, and emit heartbeats", invoke_without_command=True, no_args_is_help=False)
 console = Console()
@@ -177,22 +175,20 @@ def _receiver_loop(
     port: int,
     stop_event: threading.Event,
 ) -> None:
-    """Run the Flask receiver server in a thread."""
+    """Run the Flask receiver server in a thread.
+
+    debug=False, not exposed as a flag here: the receiver shares this
+    process with the live recording/detection pipeline, and Werkzeug's
+    debug mode reloader restarts the whole interpreter on file changes --
+    destructive mid-recording. `bugcam receive start` runs the receiver
+    standalone, where --debug is safe; see start_receiver in receive.py.
+    """
     flask_app = create_app(config={"host": host, "port": port})
     tracker = flask_app.config.get("TRACKER")
 
+    finalization_thread = finalization_stop = None
     if tracker:
-        logger.info("Scanning for orphaned tracks...")
-        tracker.recover_orphaned_tracks()
-
-        finalization_stop = threading.Event()
-        finalization_thread = threading.Thread(
-            target=_finalization_loop,
-            args=(tracker, finalization_stop),
-            daemon=True
-        )
-        finalization_thread.start()
-        logger.info("Track finalization thread started for receiver")
+        finalization_thread, finalization_stop = start_tracker_finalization(tracker)
 
     logger.info(f"Receiver starting on {host}:{port}")
     flask_app.run(host=host, port=port, threaded=True, debug=False)
@@ -200,23 +196,6 @@ def _receiver_loop(
     if tracker and finalization_thread:
         finalization_stop.set()
         finalization_thread.join(timeout=5)
-
-
-def _finalization_loop(tracker: PendingTrackTracker, stop_event: threading.Event):
-    """Background thread that checks for idle tracks to finalize."""
-    while not stop_event.is_set():
-        try:
-            tracker.check_pending()
-        except Exception as e:
-            logger.error(f"Finalization loop error: {e}")
-        stop_event.wait(PendingTrackTracker.CHECK_INTERVAL)
-
-
-def _parse_resolution_option(value: str) -> tuple[int, int]:
-    try:
-        return parse_capture_resolution(value)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
 
 
 def _resolve_runtime_settings(
@@ -231,7 +210,7 @@ def _resolve_runtime_settings(
     config = load_config()
     resolved_api_url = api_url or str(config.get("api_url") or DEFAULT_API_URL)
     resolved_api_key = api_key or str(config.get("api_key") or "")
-    resolved_flick_id = resolve_flick_id(flick_id)
+    resolved_flick_id = require_configured_flick_id(flick_id)
     resolved_dot_ids = parse_dot_ids(dot_ids) if dot_ids is not None else parse_dot_ids(config.get("dot_ids"))
     resolved_bucket = bucket or str(config.get("s3_bucket") or DEFAULT_S3_BUCKET)
 
@@ -246,8 +225,6 @@ def _resolve_runtime_settings(
     if missing_fields and enable_upload:
         joined = ", ".join(missing_fields)
         raise typer.BadParameter(f"Missing required config values: {joined}. Run `bugcam setup` or pass CLI flags.")
-    if not resolved_flick_id:
-        raise typer.BadParameter("Missing flick_id. Run `bugcam setup` or pass --flick-id.")
 
     return {
         "api_url": resolved_api_url.rstrip("/"),
@@ -371,7 +348,7 @@ def run(
     chunk_duration: int = typer.Option(60, "--chunk-duration", help="Length of each recorded chunk in seconds"),
     fps: int = typer.Option(30, "--fps", help="Recording frame rate"),
     resolution: str = typer.Option("1080x1080", "--resolution", help="Recording resolution in WxH format"),
-    bitrate: int = typer.Option(20_000_000, "--bitrate", help="H.264 encoder bitrate in bps (hardware encoding only)"),
+    bitrate: int = typer.Option(20_000_000, "--bitrate", help="H.264 encoder bitrate in bps"),
     bucket: str | None = typer.Option(None, "--bucket", help="Configured output bucket"),
     upload_poll: int = typer.Option(3600, "--upload-poll", help="Seconds between upload polls; with --archive-batch this is also the batch cadence (one tar per device per poll) (config: upload_poll_interval)"),
     heartbeat_interval: float | None = typer.Option(None, "--heartbeat-interval", help="Seconds between heartbeat snapshots (config: heartbeat_interval, default 300)"),
@@ -448,7 +425,7 @@ def run(
     except RuntimeError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
-    parsed_resolution = _parse_resolution_option(resolution)
+    parsed_resolution = parse_resolution_option(resolution)
 
     try:
         ntp_ok, ntp_detail = _check_time_sync()

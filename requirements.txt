@@ -1,7 +1,0 @@
-numpy<2.0.0
-bugspot==0.4.2
-requests
-rich
-typer[all]
-setproctitle
-opencv-python

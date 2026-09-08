@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from flask import request, jsonify
 
-from ..config import load_config
+from ..settings import load_config
 
 logger = None
 

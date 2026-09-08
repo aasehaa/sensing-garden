@@ -6,7 +6,7 @@ had detections), so the uploaded "sample" is really "best of N". --random-sampli
 disables that bias so the saved sample is always the batch's actual Nth video,
 regardless of content.
 """
-from bugcam.edge26.main import _video_sample_decision
+from bugcam.edge26.pipeline import _video_sample_decision
 
 
 # --- default mode (random_sampling=False): confirmed tracks win ---

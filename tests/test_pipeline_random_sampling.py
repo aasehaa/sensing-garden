@@ -3,7 +3,7 @@ must reach Pipeline._random_sampling, defaulting to False (today's confirmed-tra
 priority) when unset."""
 from unittest.mock import patch
 
-from bugcam.edge26 import main as edge26_main
+from bugcam.edge26 import pipeline as edge26_main
 
 
 def _pipeline(tmp_path, *, random_sampling=None):

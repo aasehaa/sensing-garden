@@ -1,9 +1,13 @@
 """
 Hierarchical insect classification.
 
-Classifies insects at 3 levels: Family, Genus, Species.
-Uses Hailo HEF models for inference via the VStreams API.
-Taxonomy (family/genus) is resolved from GBIF at startup.
+Classifies insects at 3 levels: Family, Genus, Species. HierarchicalClassifier
+owns preprocessing, output parsing, taxonomy (resolved from GBIF at startup),
+and hierarchical aggregation -- all hardware-agnostic. Model loading and the
+forward pass are delegated to a ModelRunner (interfaces.py); HailoModelRunner
+runs inference on a compiled HEF model via the VStreams API, and
+HailoClassifier is the default HierarchicalClassifier+HailoModelRunner
+binding.
 """
 
 from __future__ import annotations
@@ -17,6 +21,8 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 import requests
+
+from .interfaces import ModelRunner
 
 try:
     from hailo_platform import (
@@ -34,7 +40,7 @@ try:
 except ImportError as e:  # hailo_platform is a Pi-only hardware dependency
     # Defer the failure: keep the module importable (so `bugcam --help`, the test
     # suite, and any non-inference code path work off-Pi) and raise only when the
-    # classifier actually loads a model. See _load_model.
+    # classifier actually loads a model. See HailoModelRunner.load.
     HEF = ConfigureParams = FormatType = HailoSchedulingAlgorithm = None
     HailoStreamInterface = InferVStreams = InputVStreamParams = None
     OutputVStreamParams = VDevice = None
@@ -218,29 +224,28 @@ def _print_taxonomy_summary(taxonomy: dict, species_list: List[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Classifier
+# Classifier core (hardware-agnostic)
 # ---------------------------------------------------------------------------
 
-class HailoClassifier:
+class HierarchicalClassifier:
     """
-    Hailo-based hierarchical insect classifier.
+    Hierarchical insect classifier over an injected inference backend.
 
-    Uses the VStreams API to run inference on a compiled HEF model.
-    Outputs predictions for family, genus, and species.
+    Owns everything that doesn't depend on the inference hardware: crop
+    preprocessing, output parsing/softmax, taxonomy resolution (GBIF), and
+    hierarchical family->genus->species aggregation. Loading the model and
+    running the actual forward pass are delegated to a ModelRunner (see
+    interfaces.py) -- HailoModelRunner below is the only implementation
+    today, but an ONNX/TensorRT/CPU backend only needs to satisfy
+    ModelRunner to reuse everything in this class unchanged.
     """
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict, runner_factory) -> None:
         self.config = config
-        self.model_path = Path(config["model"])
         self._input_size: Optional[list] = config.get("input_size")
-
-        # Hailo components (lazy-loaded on first inference)
-        self._hef: Optional[HEF] = None
-        self._vdevice: Optional[VDevice] = None
-        self._network_group = None
-        self._network_group_params = None
-        self._input_vstream_params = None
-        self._output_vstream_params = None
+        self._runner_factory = runner_factory
+        self._runner: Optional[ModelRunner] = None
+        self._loaded = False
 
         # Labels & taxonomy (populated by _load_labels)
         self.family_list: List[str] = []
@@ -249,52 +254,24 @@ class HailoClassifier:
         self.species_to_genus: Dict[str, str] = {}
         self.genus_to_family: Dict[str, str] = {}
 
-        logger.info(f"HailoClassifier initialised – model: {self.model_path}")
+        logger.info("HierarchicalClassifier initialised")
 
     # ------------------------------------------------------------------
     # Model loading
     # ------------------------------------------------------------------
 
-    def _load_model(self) -> None:
-        """Load the HEF, configure the device, and build the taxonomy."""
-        if _HAILO_IMPORT_ERROR is not None:
-            raise ImportError(
-                "hailo_platform module not found. This is a system-level dependency for Hailo AI accelerators. "
-                "On Raspberry Pi OS, install it with: sudo apt install python3-hailo-tappas. "
-                "For other platforms, follow Hailo's installation guide: https://hailo.ai/developer-zone/"
-            ) from _HAILO_IMPORT_ERROR
-        if self._hef is not None:
+    def _ensure_loaded(self) -> None:
+        """Load the backend and build the taxonomy. Idempotent."""
+        if self._loaded:
             return
 
-        if not self.model_path.exists():
-            raise FileNotFoundError(f"Model not found: {self.model_path}")
-
-        # Load HEF
-        self._hef = HEF(str(self.model_path))
-
-        # Create virtual device
-        params = VDevice.create_params()
-        params.scheduling_algorithm = HailoSchedulingAlgorithm.NONE
-        self._vdevice = VDevice(params=params)
-
-        # Configure network group
-        configure_params = ConfigureParams.create_from_hef(
-            hef=self._hef, interface=HailoStreamInterface.PCIe,
-        )
-        network_groups = self._vdevice.configure(self._hef, configure_params)
-        self._network_group = network_groups[0]
-        self._network_group_params = self._network_group.create_params()
-
-        # VStream params – dequantised float32 in/out
-        self._input_vstream_params = InputVStreamParams.make(
-            self._network_group, quantized=False, format_type=FormatType.FLOAT32,
-        )
-        self._output_vstream_params = OutputVStreamParams.make(
-            self._network_group, quantized=False, format_type=FormatType.FLOAT32,
-        )
+        if self._runner is None:
+            self._runner = self._runner_factory()
+        self._runner.load()
 
         # Labels & taxonomy
         self._load_labels()
+        self._loaded = True
 
         logger.info(
             f"Model loaded: {len(self.family_list)} families, "
@@ -339,10 +316,9 @@ class HailoClassifier:
 
     def _load_labels_fallback(self) -> None:
         """Generate numeric placeholder labels from the model output shapes."""
-        output_infos = self._hef.get_output_vstream_infos()
+        head_sizes = self._runner.output_head_sizes()
 
-        for i, info in enumerate(output_infos):
-            n = info.shape[-1]
+        for i, n in enumerate(head_sizes):
             if i == 0:
                 self.family_list = [f"family_{j}" for j in range(n)]
             elif i == 1:
@@ -351,8 +327,8 @@ class HailoClassifier:
                 self.species_list = [f"class_{j}" for j in range(n)]
 
         # Single-head model → treat as species-only
-        if len(output_infos) == 1:
-            n = output_infos[0].shape[-1]
+        if len(head_sizes) == 1:
+            n = head_sizes[0]
             self.species_list = [f"class_{j}" for j in range(n)]
             self.family_list = list(self.species_list)
             self.genus_list = list(self.species_list)
@@ -368,10 +344,10 @@ class HailoClassifier:
         Returns a HierarchicalClassification with family/genus/species
         predictions and their softmax probabilities.
         """
-        self._load_model()
+        self._ensure_loaded()
 
         preprocessed = self._preprocess(crop)
-        raw_outputs = self._run_inference(preprocessed)
+        raw_outputs = self._runner.run(preprocessed)
 
         family_probs, genus_probs, species_probs = self._parse_outputs(raw_outputs)
 
@@ -444,17 +420,17 @@ class HailoClassifier:
 
     @property
     def num_families(self) -> int:
-        self._load_model()
+        self._ensure_loaded()
         return len(self.family_list)
 
     @property
     def num_genera(self) -> int:
-        self._load_model()
+        self._ensure_loaded()
         return len(self.genus_list)
 
     @property
     def num_species(self) -> int:
-        self._load_model()
+        self._ensure_loaded()
         return len(self.species_list)
 
     # ------------------------------------------------------------------
@@ -475,28 +451,8 @@ class HailoClassifier:
         if self._input_size and len(self._input_size) >= 2:
             return int(self._input_size[0]), int(self._input_size[1])
 
-        self._load_model()
-        shape = self._hef.get_input_vstream_infos()[0].shape  # (H, W, C)
-        return int(shape[0]), int(shape[1])
-
-    def _run_inference(self, preprocessed: np.ndarray) -> List[np.ndarray]:
-        """Run a single forward pass through the Hailo VStreams pipeline."""
-        input_info = self._hef.get_input_vstream_infos()[0]
-        output_infos = self._hef.get_output_vstream_infos()
-
-        # Batch dimension required by InferVStreams
-        input_data = {input_info.name: np.expand_dims(preprocessed, axis=0)}
-
-        with InferVStreams(
-            self._network_group,
-            self._input_vstream_params,
-            self._output_vstream_params,
-        ) as pipeline:
-            with self._network_group.activate(self._network_group_params):
-                results = pipeline.infer(input_data)
-
-        # Strip batch dimension and ensure float32
-        return [results[info.name][0].astype(np.float32) for info in output_infos]
+        self._ensure_loaded()
+        return self._runner.input_hw()
 
     def _parse_outputs(
         self, outputs: List[np.ndarray],
@@ -540,3 +496,113 @@ class HailoClassifier:
         if candidates:
             return candidates[int(np.argmax(probs[candidates]))]
         return int(np.argmax(probs))
+
+
+# ---------------------------------------------------------------------------
+# Hailo inference backend
+# ---------------------------------------------------------------------------
+
+class HailoModelRunner:
+    """
+    ModelRunner (interfaces.py) backed by a Hailo HEF model via the
+    VStreams API. The only Hailo-specific code in this module -- everything
+    else in HierarchicalClassifier is hardware-agnostic.
+    """
+
+    def __init__(self, model_path: Path) -> None:
+        self.model_path = model_path
+
+        self._hef: Optional[HEF] = None
+        self._vdevice: Optional[VDevice] = None
+        self._network_group = None
+        self._network_group_params = None
+        self._input_vstream_params = None
+        self._output_vstream_params = None
+
+    def load(self) -> None:
+        """Load the HEF and configure the device. Idempotent."""
+        if _HAILO_IMPORT_ERROR is not None:
+            raise ImportError(
+                "hailo_platform module not found. This is a system-level dependency for Hailo AI accelerators. "
+                "On Raspberry Pi OS, install it with: sudo apt install python3-hailo-tappas. "
+                "For other platforms, follow Hailo's installation guide: https://hailo.ai/developer-zone/"
+            ) from _HAILO_IMPORT_ERROR
+        if self._hef is not None:
+            return
+
+        if not self.model_path.exists():
+            raise FileNotFoundError(f"Model not found: {self.model_path}")
+
+        # Load HEF
+        self._hef = HEF(str(self.model_path))
+
+        # Create virtual device
+        params = VDevice.create_params()
+        params.scheduling_algorithm = HailoSchedulingAlgorithm.NONE
+        self._vdevice = VDevice(params=params)
+
+        # Configure network group
+        configure_params = ConfigureParams.create_from_hef(
+            hef=self._hef, interface=HailoStreamInterface.PCIe,
+        )
+        network_groups = self._vdevice.configure(self._hef, configure_params)
+        self._network_group = network_groups[0]
+        self._network_group_params = self._network_group.create_params()
+
+        # VStream params – dequantised float32 in/out
+        self._input_vstream_params = InputVStreamParams.make(
+            self._network_group, quantized=False, format_type=FormatType.FLOAT32,
+        )
+        self._output_vstream_params = OutputVStreamParams.make(
+            self._network_group, quantized=False, format_type=FormatType.FLOAT32,
+        )
+
+    def input_hw(self) -> Tuple[int, int]:
+        """Return the model's expected (height, width)."""
+        self.load()
+        shape = self._hef.get_input_vstream_infos()[0].shape  # (H, W, C)
+        return int(shape[0]), int(shape[1])
+
+    def output_head_sizes(self) -> List[int]:
+        """Each output head's class count, in model output order."""
+        self.load()
+        return [info.shape[-1] for info in self._hef.get_output_vstream_infos()]
+
+    def run(self, preprocessed: np.ndarray) -> List[np.ndarray]:
+        """Run a single forward pass through the Hailo VStreams pipeline."""
+        input_info = self._hef.get_input_vstream_infos()[0]
+        output_infos = self._hef.get_output_vstream_infos()
+
+        # Batch dimension required by InferVStreams
+        input_data = {input_info.name: np.expand_dims(preprocessed, axis=0)}
+
+        with InferVStreams(
+            self._network_group,
+            self._input_vstream_params,
+            self._output_vstream_params,
+        ) as pipeline:
+            with self._network_group.activate(self._network_group_params):
+                results = pipeline.infer(input_data)
+
+        # Strip batch dimension and ensure float32
+        return [results[info.name][0].astype(np.float32) for info in output_infos]
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible Hailo binding
+# ---------------------------------------------------------------------------
+
+class HailoClassifier(HierarchicalClassifier):
+    """
+    HierarchicalClassifier bound to Hailo hardware inference.
+
+    Kept as the default `classifier_cls` (see VideoProcessor) and for
+    existing `HailoClassifier(config)` call sites. A different inference
+    backend (ONNX, TensorRT, a CPU fallback) should implement ModelRunner
+    and construct HierarchicalClassifier directly rather than subclassing
+    this -- there's nothing Hailo-specific to inherit.
+    """
+
+    def __init__(self, config: dict) -> None:
+        model_path = Path(config["model"])
+        super().__init__(config, runner_factory=lambda: HailoModelRunner(model_path))

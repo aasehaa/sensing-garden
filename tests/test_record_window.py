@@ -146,7 +146,7 @@ def test_local_video_date_bad_stem_falls_back_to_prefix() -> None:
 # --- recorder integration ---
 
 def test_chunk_filenames_are_utc(tmp_path: Path) -> None:
-    from bugcam.edge26.capture.recorder import VideoRecorder
+    from bugcam.edge26.recorder import VideoRecorder
 
     recorder = VideoRecorder(
         output_dir=str(tmp_path),
@@ -179,7 +179,7 @@ class _StubWindow:
 
 
 def _make_recorder(tmp_path: Path, window):
-    from bugcam.edge26.capture.recorder import VideoRecorder
+    from bugcam.edge26.recorder import VideoRecorder
 
     return VideoRecorder(
         output_dir=str(tmp_path),
@@ -211,7 +211,7 @@ def test_wait_for_window_without_window_is_open(tmp_path: Path) -> None:
 # --- config plumbing ---
 
 def test_edge26_config_carries_timezone_and_window(tmp_path: Path) -> None:
-    from bugcam.processing import build_edge26_config
+    from bugcam.edge26.config import build_edge26_config
 
     config = build_edge26_config(
         flick_id="flick-test",

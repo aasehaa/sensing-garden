@@ -8,7 +8,7 @@ must delegate the actual validation to resolve_zone()."""
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-from bugcam.edge26 import main as edge26_main
+from bugcam.edge26 import pipeline as edge26_main
 
 
 def _pipeline(tmp_path, timezone_name):

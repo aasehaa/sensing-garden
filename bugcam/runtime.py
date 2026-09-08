@@ -5,7 +5,7 @@ from pathlib import Path
 
 from bugcam.edge26 import Pipeline, setup_logging
 from bugcam.model_bundles import resolve_bundle_reference, resolve_model_path
-from bugcam.processing import build_bundle_provenance, build_edge26_config
+from bugcam.edge26.config import build_bundle_provenance, build_edge26_config
 
 
 def resolve_model_assets(model_reference: str) -> tuple[Path, Path]:

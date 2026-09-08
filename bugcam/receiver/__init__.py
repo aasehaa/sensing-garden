@@ -6,9 +6,10 @@ This module provides an HTTP server for receiving insect track data from iOS dev
 from flask import Flask
 from pathlib import Path
 import logging
+import threading
 
 from .config import RECEIVER_DEFAULT_PORT, RECEIVER_DEFAULT_HOST
-from .tracker import PendingTrackTracker
+from .tracker import PendingTrackTracker, finalization_loop
 from .routes import register_routes
 
 logger = logging.getLogger(__name__)
@@ -50,9 +51,31 @@ def create_app(config=None) -> Flask:
     return app
 
 
+def start_tracker_finalization(tracker: PendingTrackTracker) -> tuple[threading.Thread, threading.Event]:
+    """Recover orphaned tracks and start the background finalization thread.
+
+    Shared by `bugcam run` (receiver embedded alongside the pipeline) and
+    `bugcam receive start` (standalone receiver server). Returns the thread
+    and its stop event -- both daemon, so the thread dies with the process
+    even if the caller never signals/joins it.
+    """
+    logger.info("Scanning for orphaned tracks...")
+    tracker.recover_orphaned_tracks()
+
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=finalization_loop,
+        args=(tracker, stop_event),
+        daemon=True,
+    )
+    thread.start()
+    logger.info("Track finalization thread started")
+    return thread, stop_event
+
+
 def _get_input_storage() -> Path:
     """Get the input storage directory from bugcam config."""
-    from ..config import get_input_storage_dir
+    from ..settings import get_input_storage_dir
     return get_input_storage_dir()
 
 

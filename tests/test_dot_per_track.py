@@ -99,7 +99,7 @@ def test_dot_empty_track_deleted_no_upload(tmp_path):
 # Criterion 4 — videos. Detection (subprocess) enqueues a "video" task to the disk
 # queue; the main-process worker ships it as kind="video" and drops the local copy.
 def test_dot_media_enqueues_video_task(tmp_path):
-    from bugcam.edge26.main import Pipeline
+    from bugcam.edge26.pipeline import Pipeline
     from bugcam.edge26.queue import ClassificationQueue
 
     _, out = _pollen(tmp_path)
@@ -124,7 +124,7 @@ def test_dot_media_enqueues_video_task(tmp_path):
 
 
 def test_publish_dot_video_ships_and_drops_copy(tmp_path):
-    from bugcam.edge26.main import Pipeline
+    from bugcam.edge26.pipeline import Pipeline
     from bugcam.edge26.queue import QueueEntry
 
     pol, out = _pollen(tmp_path)
@@ -151,7 +151,7 @@ def test_publish_dot_video_ships_and_drops_copy(tmp_path):
 def test_publish_dot_video_kept_and_raises_when_no_owner(tmp_path):
     """No upload owner -> raise (so the queue retries) and never lose the video."""
     import pytest
-    from bugcam.edge26.main import Pipeline
+    from bugcam.edge26.pipeline import Pipeline
     from bugcam.edge26.queue import QueueEntry
 
     _, out = _pollen(tmp_path)

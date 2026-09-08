@@ -9,10 +9,9 @@ import time
 from pathlib import Path
 from datetime import datetime, timezone
 
-import cv2
-
-from bugcam.edge26.capture import VideoRecorder
-from bugcam.edge26.processing import VideoProcessor, HailoClassifier
+from bugcam.edge26.recorder import VideoRecorder
+from bugcam.edge26.detection import VideoProcessor
+from bugcam.edge26.interfaces import crop_dir_name
 from bugcam.edge26.output import ResultsWriter
 from bugcam.edge26.metrics import PipelineMetrics
 from bugcam.edge26.queue import ClassificationQueue, QueueEntry
@@ -243,7 +242,7 @@ class Pipeline:
         
         # Eagerly initialize classifier for the classification thread
         if self.enable_classification and self.processor:
-            self.processor._classifier = HailoClassifier(self.processor.classification_config)
+            self.processor.ensure_classifier()
             logger.info("Hailo classifier initialized")
         
         logger.info("=" * 60)
@@ -286,8 +285,6 @@ class Pipeline:
             resolution=tuple(capture.get("resolution", [1080, 1080])),
             device_id=self.flick_id,
             video_queue=self.video_queue,
-            camera_index=capture["camera_index"],
-            use_picamera=capture["use_picamera"],
             recording_mode=pipeline_cfg.get("recording_mode", "continuous"),
             interval_minutes=pipeline_cfg.get("recording_interval_minutes", 5),
             bitrate=capture.get("bitrate", 20_000_000),
@@ -710,7 +707,7 @@ class Pipeline:
             
             # Run BugSpot detection/tracking (Phases 1-4)
             detection_started = time.monotonic()
-            result = self.processor._pipeline.process_video(
+            result = self.processor.process_video(
                 str(video_path),
                 extract_crops=True,
                 render_composites=self.processor.output_config.get("save_composites", True),
@@ -735,7 +732,7 @@ class Pipeline:
             for track_id, track in result.confirmed_tracks.items():
                 # BugSpot saves crops using first 8 chars of track UUID
                 # track_id format: {uuid}_{timestamp} -> use first 8 chars for directory
-                base_track_id = track_id.split('-')[0]
+                base_track_id = crop_dir_name(track_id)
                 track_dir = output_dir / "crops" / base_track_id
 
                 if not track_dir.exists():
@@ -1075,53 +1072,24 @@ class Pipeline:
             return
         
         logger.info(f"CLASSIFY FLIK: {entry.track_id} ({entry.num_crops} crops)")
-        
-        # Load crops
-        crop_files = sorted(track_dir.glob("frame_*.jpg"))
-        if not crop_files:
+
+        if not any(track_dir.glob("frame_*.jpg")):
             logger.warning(f"No crops found in {track_dir}")
             self._check_classification_complete(output_dir)
             return
-        
+
         # Ensure classifier is initialized
-        if self.processor._classifier is None:
-            self.processor._classifier = HailoClassifier(self.processor.classification_config)
-        
-        # Classify
-        classifications = []
-        frames = []
-        
-        for crop_path in crop_files:
-            crop = cv2.imread(str(crop_path))
-            if crop is None:
-                continue
-            
-            frame_num = int(crop_path.stem.split("_")[1])
-            classification = self.processor._classifier.classify(crop)
-            classifications.append(classification)
-            
-            frames.append({
-                "frame_number": frame_num,
-                "prediction": {
-                    "family": classification.family,
-                    "genus": classification.genus,
-                    "species": classification.species,
-                    "family_confidence": classification.family_confidence,
-                    "genus_confidence": classification.genus_confidence,
-                    "species_confidence": classification.species_confidence,
-                }
-            })
-        
-        if not classifications:
+        self.processor.ensure_classifier()
+
+        # Classify + hierarchically aggregate crops (shared with the DOT path)
+        classified = self.processor.classify_track_crops(track_dir, entry.track_id, entry.time)
+        if classified is None:
             self._check_classification_complete(output_dir)
             return
-        
-        # Hierarchical aggregation
-        final_pred = self.processor._classifier.hierarchical_aggregate(classifications)
-        if not final_pred:
-            self._check_classification_complete(output_dir)
-            return
-        
+
+        frames = classified["frames"]
+        final_pred = classified["final_prediction"]
+
         logger.info(f"  {final_pred['family']} / {final_pred['genus']} / {final_pred['species']} "
                    f"({final_pred['species_confidence']:.1%})")
         
@@ -1216,7 +1184,7 @@ class Pipeline:
         logger.info(f"CLASSIFY DOT: {entry.track_id} ({entry.num_crops} crops)")
         
         # Classify using existing method
-        track_result = self.processor.classify_dot_track(
+        track_result = self.processor.classify_track_crops(
             track_dir, entry.track_id, entry.time
         )
         

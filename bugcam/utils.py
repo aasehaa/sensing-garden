@@ -2,7 +2,7 @@ import subprocess
 import platform
 from rich.console import Console
 from rich.table import Table
-from .config import get_python_for_detection
+from .settings import get_python_for_detection
 
 console = Console()
 

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from bugcam.config import get_state_dir
+from bugcam.settings import get_state_dir
 
 
 SEN55_BINARY_NAME = "sen55_reader"

@@ -8,7 +8,7 @@ from typing import Optional
 import xml.etree.ElementTree as ET
 import urllib.request
 
-from .config import get_cache_dir
+from .settings import get_cache_dir
 
 MODELS_BASE_URL = "https://scl-sensing-garden-models.s3.amazonaws.com"
 BUNDLE_MODEL_FILENAME = "model.hef"

@@ -1,4 +1,4 @@
-"""BugCam edge26 configuration bridge."""
+"""Builds the edge26 pipeline config dict from BugCam-owned settings and detection.yaml."""
 from __future__ import annotations
 
 import os
@@ -7,10 +7,10 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from .config import (
+from ..settings import (
     get_edge26_taxonomy_cache_path,
 )
-from .model_bundles import sha256_file
+from ..model_bundles import sha256_file
 
 DEFAULT_CAPTURE_RESOLUTION = (1080, 1080)
 MAX_CAPTURE_WIDTH = 3840
@@ -223,8 +223,6 @@ def build_edge26_config(
             "random_sampling": random_sampling,
         },
         "capture": {
-            "camera_index": 0,
-            "use_picamera": True,
             "fps": fps,
             "chunk_duration_seconds": chunk_duration,
             "resolution": list(resolution),

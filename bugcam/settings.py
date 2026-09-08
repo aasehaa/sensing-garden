@@ -1,10 +1,13 @@
-"""Shared configuration utilities for bugcam."""
+"""Configuration for bugcam: persistent config file, environment overrides, and
+the typed device config built from them. This is the single home for
+config/device resolution used by the CLI and edge26 service wiring."""
 import json
 import logging
 import os
 import platform
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -211,6 +214,60 @@ def is_edge26_continuous_tracking_enabled() -> bool:
     """Return whether edge26 continuous tracking is enabled."""
     value = os.environ.get("BUGCAM_EDGE26_CONTINUOUS_TRACKING", "0").lower()
     return value not in {"0", "false", "no"}
+
+
+@dataclass(frozen=True)
+class DeviceConfig:
+    api_url: str = DEFAULT_API_URL
+    api_key: str = ""
+    s3_bucket: str = DEFAULT_S3_BUCKET
+    flick_id: str = ""
+    dot_ids: list[str] | None = None
+
+
+def build_dot_ids(flick_id: str, dot_count: int) -> list[str]:
+    """Build deterministic DOT identifiers for a FLICK device."""
+    return [f"{flick_id}-dot{index:02d}" for index in range(1, dot_count + 1)]
+
+
+def get_configured_flick_id() -> str:
+    """The explicitly configured flick_id -- persisted config or the
+    BUGCAM_FLICK_ID env var -- with no further default applied.
+
+    Returns "" only when neither is set, i.e. resolve_flick_id() would fall
+    all the way back to the hardcoded literal default ("bugcam-rpi"). Unlike
+    load_device_config()/resolve_flick_id() (which always resolve to a
+    working ID), this is for callers that need to tell "configured" apart
+    from "not" -- e.g. `bugcam status`/`dot-info`/`heartbeat` reporting, or
+    `run`/`process`/`record` refusing to operate as the default device on an
+    unconfigured install.
+    """
+    config = load_config()
+    configured = str(config.get("flick_id") or config.get("device_id") or "").strip()
+    if configured:
+        return configured
+    return os.environ.get("BUGCAM_FLICK_ID", "").strip()
+
+
+def load_device_config() -> DeviceConfig:
+    """Load persisted device config with defaults applied."""
+    config = load_config()
+    flick_id = str(config.get("flick_id") or config.get("device_id") or get_default_flick_id())
+    dot_ids = parse_dot_ids(config.get("dot_ids")) or get_default_dot_ids()
+    return DeviceConfig(
+        api_url=str(config.get("api_url") or DEFAULT_API_URL),
+        api_key=str(config.get("api_key") or ""),
+        s3_bucket=str(config.get("s3_bucket") or DEFAULT_S3_BUCKET),
+        flick_id=flick_id,
+        dot_ids=dot_ids,
+    )
+
+
+def resolve_flick_id(flick_id: str | None) -> str:
+    """Resolve flick_id with CLI override first, then config, then default."""
+    if flick_id:
+        return flick_id
+    return load_device_config().flick_id or get_default_flick_id()
 
 
 def get_source_commit() -> str | None:

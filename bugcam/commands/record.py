@@ -9,9 +9,8 @@ from pathlib import Path
 from datetime import datetime
 from rich.console import Console
 from typing import Optional
-from ..config import get_input_storage_dir
-from ..device_config import resolve_flick_id
-from ..processing import parse_capture_resolution
+from ..settings import get_input_storage_dir
+from . import parse_resolution_option, require_configured_flick_id
 
 app = typer.Typer(help="Record videos from camera")
 console = Console()
@@ -23,17 +22,6 @@ DEFAULT_OUTPUT_DIR = get_input_storage_dir()
 def _build_recording_path(output_dir: Path, flick_id: str) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return output_dir / f"{flick_id}_{timestamp}.mp4"
-
-
-def _resolve_recording_flick_id(flick_id: Optional[str]) -> str:
-    return resolve_flick_id(flick_id)
-
-
-def _parse_resolution_option(value: str) -> tuple[int, int]:
-    try:
-        return parse_capture_resolution(value)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
 
 
 def _check_disk_space(output_dir: Path, min_free_mb: int = 300) -> tuple[bool, int]:
@@ -156,8 +144,8 @@ def single(
     if not _check_camera_available():
         console.print("[red]Camera not accessible[/red]")
         raise typer.Exit(1)
-    parsed_resolution = _parse_resolution_option(resolution)
-    resolved_flick_id = _resolve_recording_flick_id(flick_id)
+    parsed_resolution = parse_resolution_option(resolution)
+    resolved_flick_id = require_configured_flick_id(flick_id)
 
     # Generate output path if not specified
     if output is None:

@@ -10,7 +10,7 @@ import logging
 import subprocess
 from pathlib import Path
 
-from bugcam.config import get_source_commit, log_startup_config, redact_device_config
+from bugcam.settings import get_source_commit, log_startup_config, redact_device_config
 
 
 def _init_git_repo(path: Path) -> str:
@@ -92,7 +92,7 @@ def test_redact_device_config_handles_missing_api_key() -> None:
 
 
 def test_log_startup_config_logs_full_detection_and_tracking(caplog, monkeypatch) -> None:
-    monkeypatch.setattr("bugcam.config.get_source_commit", lambda: "abc1234")
+    monkeypatch.setattr("bugcam.settings.get_source_commit", lambda: "abc1234")
     caplog.set_level(logging.INFO, logger="bugcam.startup")
 
     log_startup_config(
@@ -122,7 +122,7 @@ def test_log_startup_config_logs_full_detection_and_tracking(caplog, monkeypatch
 
 
 def test_log_startup_config_reports_commit_unavailable(caplog, monkeypatch) -> None:
-    monkeypatch.setattr("bugcam.config.get_source_commit", lambda: None)
+    monkeypatch.setattr("bugcam.settings.get_source_commit", lambda: None)
     caplog.set_level(logging.INFO, logger="bugcam.startup")
 
     log_startup_config(
@@ -141,7 +141,7 @@ def test_log_startup_config_never_raises_when_commit_lookup_fails(caplog, monkey
     def _raise(*args, **kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("bugcam.config.get_source_commit", _raise)
+    monkeypatch.setattr("bugcam.settings.get_source_commit", _raise)
     caplog.set_level(logging.INFO, logger="bugcam.startup")
 
     log_startup_config(

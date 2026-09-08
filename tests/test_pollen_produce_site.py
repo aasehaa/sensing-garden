@@ -65,7 +65,7 @@ class TestPipelineHook:
     def test_pipeline_invokes_callback_safely(self):
         # The pipeline calls the callback through a guard that swallows errors so a
         # failing upload owner never breaks classification.
-        from bugcam.edge26.main import Pipeline
+        from bugcam.edge26.pipeline import Pipeline
 
         calls = []
         pipe = Pipeline.__new__(Pipeline)
@@ -78,7 +78,7 @@ class TestPipelineHook:
         pipe._notify_result_ready(Path("/out/x"))  # must not raise
 
     def test_no_callback_is_a_noop(self):
-        from bugcam.edge26.main import Pipeline
+        from bugcam.edge26.pipeline import Pipeline
 
         pipe = Pipeline.__new__(Pipeline)
         pipe._on_result_ready = None
