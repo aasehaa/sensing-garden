@@ -109,3 +109,35 @@ class ClassifierBackend(Protocol):
     def hierarchical_aggregate(
         self, classifications: list[ClassificationResult]
     ) -> dict | None: ...
+
+
+@runtime_checkable
+class ModelRunner(Protocol):
+    """What HierarchicalClassifier (classification.py) needs from an
+    inference backend. This is one level narrower than ClassifierBackend
+    above: preprocessing (crop resize/colorspace), output parsing/softmax,
+    taxonomy resolution, and hierarchical aggregation are shared and
+    hardware-agnostic, living on HierarchicalClassifier itself; only the
+    actual model load + forward pass are backend-specific, and that's all
+    this Protocol covers. HailoModelRunner satisfies it today; an
+    ONNX/TensorRT/CPU backend only needs to implement this, not reimplement
+    softmax or taxonomy lookup."""
+
+    def load(self) -> None:
+        """Load the model and prepare for inference. Idempotent."""
+        ...
+
+    def input_hw(self) -> tuple[int, int]:
+        """Return the model's expected (height, width) input."""
+        ...
+
+    def output_head_sizes(self) -> list[int]:
+        """Each output head's class count, in model output order. Used only
+        to build numeric placeholder labels when no labels file is
+        configured."""
+        ...
+
+    def run(self, preprocessed) -> list:
+        """Run one forward pass; return raw (pre-softmax) per-head outputs,
+        batch dimension already stripped."""
+        ...
