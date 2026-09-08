@@ -40,9 +40,11 @@ if [[ -n "$PYTAPPAS_WHL" ]]; then
     pip install "$PYTAPPAS_WHL"
 fi
 
-# Install the required Python dependencies
-echo "Installing required Python dependencies..."
-pip install -r requirements.txt
+# Install bugcam and its dependencies from pyproject.toml -- the sole
+# source of the runtime dependency list, so there's nothing left to drift
+# out of sync the way requirements.txt's stale bugspot pin once did.
+echo "Installing bugcam (editable) from pyproject.toml..."
+pip install -e "$(dirname "$0")/.."
 
 # Install Hailo Apps Infrastructure from specified tag/branch
 echo "Installing Hailo Apps Infrastructure from version: $TAG..."
