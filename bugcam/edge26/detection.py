@@ -11,7 +11,7 @@ import cv2
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from bugspot import (
     DetectionPipeline,
@@ -24,6 +24,7 @@ from bugspot import (
 )
 
 from .classification import HailoClassifier
+from .interfaces import ClassifierBackend, DetectionBackend
 
 __all__ = [
     "VideoProcessor",
@@ -49,36 +50,88 @@ class VideoProcessor:
         6.   Hierarchical Aggregation
     """
     
-    def __init__(self, config: dict):
+    def __init__(
+        self,
+        config: dict,
+        backend_factory: Optional[Callable[[dict], DetectionBackend]] = None,
+        classifier_cls: Optional[Callable[[dict], ClassifierBackend]] = None,
+    ):
+        # Resolved inside the body, not as a default-argument value: a
+        # default is bound once at def time, which would make
+        # patch("bugcam.edge26.detection.DetectionPipeline") (used by
+        # existing tests) silently no-op since it patches after that
+        # binding already happened. Looking the name up here instead reads
+        # the module global at call time, so the patch still lands.
+        backend_factory = backend_factory or DetectionPipeline
+        classifier_cls = classifier_cls or HailoClassifier
+
         self.config = config
         self.detection_config = config.get("detection", {})
         self.classification_config = config.get("classification", {})
         self.tracking_config = config.get("tracking", {})
         self.output_config = config.get("output", {})
         self.model_metadata = config.get("model", {})
-        
+        self._classifier_cls = classifier_cls
+
         # Build bugspot config (merge detection + tracking params)
         bugspot_config = dict(self.detection_config)
         bugspot_config["max_lost_frames"] = self.tracking_config.get("max_lost_frames", 45)
         bugspot_config["tracker_w_dist"] = self.tracking_config.get("w_dist", 0.6)
         bugspot_config["tracker_w_area"] = self.tracking_config.get("w_area", 0.4)
         bugspot_config["tracker_cost_threshold"] = self.tracking_config.get("cost_threshold", 0.3)
-        
-        # Core pipeline (BugSpot)
-        self._pipeline = DetectionPipeline(bugspot_config)
-        
+
+        # Core pipeline (BugSpot by default; see backend_factory param)
+        self._pipeline: DetectionBackend = backend_factory(bugspot_config)
+
         # Pipeline toggles
         pipeline_config = config.get("pipeline", {})
         self.enable_classification = pipeline_config.get("enable_classification", True)
         self.continuous_tracking = pipeline_config.get("continuous_tracking", False)
-        
+
         # Classifier (lazy loaded)
-        self._classifier: Optional[HailoClassifier] = None
-        
+        self._classifier: Optional[ClassifierBackend] = None
+
         classify_str = "detection + classification" if self.enable_classification else "detection only"
         tracking_str = "continuous" if self.continuous_tracking else "per-video"
         logger.info(f"VideoProcessor initialized ({classify_str}, tracking: {tracking_str})")
-    
+
+    def process_video(
+        self,
+        video_path: str,
+        *,
+        extract_crops: bool,
+        render_composites: bool,
+        save_crops_dir: str,
+        save_composites_dir: Optional[str],
+    ):
+        """Run detection/tracking on one video via the injected backend.
+
+        The sole entry point into the backend -- callers must not reach
+        into `._pipeline` directly, so a substitute backend only has to
+        satisfy DetectionBackend (see interfaces.py), not this class's
+        internals.
+        """
+        return self._pipeline.process_video(
+            video_path,
+            extract_crops=extract_crops,
+            render_composites=render_composites,
+            save_crops_dir=save_crops_dir,
+            save_composites_dir=save_composites_dir,
+        )
+
+    def ensure_classifier(self) -> ClassifierBackend:
+        """Lazily construct the classifier if needed, and return it.
+
+        The single construction point for the injected classifier_cls --
+        callers must not construct one themselves or reach into
+        `._classifier` directly, so a substitute classifier only has to
+        satisfy ClassifierBackend (see interfaces.py), not this class's
+        internals.
+        """
+        if self._classifier is None:
+            self._classifier = self._classifier_cls(self.classification_config)
+        return self._classifier
+
     def classify_track_crops(self, track_dir: Path, track_id: str,
                              timestamp: Optional[str] = None) -> Optional[Dict]:
         """
@@ -93,9 +146,8 @@ class VideoProcessor:
         Returns:
             Dict with track classification results, or None if no valid crops
         """
-        if self._classifier is None:
-            self._classifier = HailoClassifier(self.classification_config)
-        
+        classifier = self.ensure_classifier()
+
         crop_files = sorted(track_dir.glob("frame_*.jpg"))
         if not crop_files:
             return None
@@ -110,7 +162,7 @@ class VideoProcessor:
                 continue
             
             frame_num = int(crop_path.stem.split("_")[1])
-            classification = self._classifier.classify(crop)
+            classification = classifier.classify(crop)
             classifications.append(classification)
             
             frames.append({
@@ -128,7 +180,7 @@ class VideoProcessor:
         if not classifications:
             return None
         
-        final_pred = self._classifier.hierarchical_aggregate(classifications)
+        final_pred = classifier.hierarchical_aggregate(classifications)
         if not final_pred:
             return None
         

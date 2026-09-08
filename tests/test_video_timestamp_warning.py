@@ -32,9 +32,9 @@ def _pipeline(tmp_path):
 
 
 def _install_fake_detection_result(pipeline, tmp_path, *, track_id: str) -> None:
-    """Wire processor._pipeline.process_video() to return one confirmed track
-    whose crops dir already exists on disk, so it survives the
-    queueable_tracks filter and confirmed_count > 0."""
+    """Wire processor.process_video() to return one confirmed track whose
+    crops dir already exists on disk, so it survives the queueable_tracks
+    filter and confirmed_count > 0."""
     fake_track = SimpleNamespace(crops=[object(), object()])
     fake_result = SimpleNamespace(
         confirmed_tracks={track_id: fake_track},
@@ -42,7 +42,7 @@ def _install_fake_detection_result(pipeline, tmp_path, *, track_id: str) -> None
         all_detections=[],
         video_info={},
     )
-    pipeline.processor._pipeline.process_video.return_value = fake_result
+    pipeline.processor.process_video.return_value = fake_result
 
 
 def test_malformed_video_stem_logs_warning_and_ships_null_timestamp(tmp_path, caplog):

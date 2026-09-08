@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from bugcam.edge26.recorder import VideoRecorder
 from bugcam.edge26.detection import VideoProcessor
-from bugcam.edge26.classification import HailoClassifier
+from bugcam.edge26.interfaces import crop_dir_name
 from bugcam.edge26.output import ResultsWriter
 from bugcam.edge26.metrics import PipelineMetrics
 from bugcam.edge26.queue import ClassificationQueue, QueueEntry
@@ -242,7 +242,7 @@ class Pipeline:
         
         # Eagerly initialize classifier for the classification thread
         if self.enable_classification and self.processor:
-            self.processor._classifier = HailoClassifier(self.processor.classification_config)
+            self.processor.ensure_classifier()
             logger.info("Hailo classifier initialized")
         
         logger.info("=" * 60)
@@ -707,7 +707,7 @@ class Pipeline:
             
             # Run BugSpot detection/tracking (Phases 1-4)
             detection_started = time.monotonic()
-            result = self.processor._pipeline.process_video(
+            result = self.processor.process_video(
                 str(video_path),
                 extract_crops=True,
                 render_composites=self.processor.output_config.get("save_composites", True),
@@ -732,7 +732,7 @@ class Pipeline:
             for track_id, track in result.confirmed_tracks.items():
                 # BugSpot saves crops using first 8 chars of track UUID
                 # track_id format: {uuid}_{timestamp} -> use first 8 chars for directory
-                base_track_id = track_id.split('-')[0]
+                base_track_id = crop_dir_name(track_id)
                 track_dir = output_dir / "crops" / base_track_id
 
                 if not track_dir.exists():
@@ -1079,8 +1079,7 @@ class Pipeline:
             return
 
         # Ensure classifier is initialized
-        if self.processor._classifier is None:
-            self.processor._classifier = HailoClassifier(self.processor.classification_config)
+        self.processor.ensure_classifier()
 
         # Classify + hierarchically aggregate crops (shared with the DOT path)
         classified = self.processor.classify_track_crops(track_dir, entry.track_id, entry.time)
