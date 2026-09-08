@@ -3,8 +3,6 @@
 through backend_factory/classifier_cls, not the bugspot/Hailo defaults, and
 callers must go through process_video()/ensure_classifier() rather than
 reaching into _pipeline/_classifier directly."""
-from pathlib import Path
-
 import numpy as np
 
 
