@@ -1,0 +1,155 @@
+# =============================================================================
+# BUGSPOT DETECTION CONFIGURATION
+# =============================================================================
+# This config controls motion-based insect detection parameters.
+# All values shown are defaults - modify as needed for your use case.
+#
+# RESOLUTION-INDEPENDENT UNITS
+# ----------------------------
+# Scene-scale pixel parameters below are given as FRACTIONS of the input
+# image dimensions, not as absolute pixels. This makes a single config
+# work across any resolution. Two reference dimensions are used:
+#
+#   * Length-based -> fraction of image width W
+#         Keys:  min_displacement, max_frame_jump, revisit_radius
+#   * Area-based   -> fraction of image area (W * H)
+#         Keys:  min_area, max_area
+#
+# Examples below show the resolved pixel value for a 1080 px wide square
+# frame (1080 x 1080, area = 1,166,400 px^2):
+#   min_area: 0.0002        ->   ~233 px^2
+#   min_displacement: 0.05  ->    54  px
+#
+# `morph_kernel_size` is an exception: it is a local noise-removal
+# kernel and stays in absolute pixels (NxN) regardless of resolution.
+#
+# Usage:
+#   results = inference(..., config="detection_config.yaml")
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# GMM BACKGROUND SUBTRACTOR PARAMETERS
+# -----------------------------------------------------------------------------
+# Controls the Gaussian Mixture Model for motion detection
+
+# Number of frames to build background model
+# Higher = more stable background, slower adaptation to lighting changes
+gmm_history: 500
+
+# Variance threshold for foreground detection
+# Higher = less sensitive, fewer false positives from noise
+gmm_var_threshold: 16
+
+# -----------------------------------------------------------------------------
+# MORPHOLOGICAL FILTERING
+# -----------------------------------------------------------------------------
+# Noise removal after motion detection
+
+# Size of the morphological kernel in pixels (NxN ellipse).
+# This is an absolute pixel count, NOT a fraction of image width — the
+# kernel targets sensor-level noise, not scene-scale features.
+# Larger = removes more noise but may lose small detections.
+morph_kernel_size: 3
+
+# -----------------------------------------------------------------------------
+# COHESIVENESS PARAMETERS
+# -----------------------------------------------------------------------------
+# These filter scattered motion (wind-blown plants) vs compact motion (insects)
+
+# Min ratio of largest blob to total motion area in detection region
+# Higher = stricter, rejects fragmented detections
+min_largest_blob_ratio: 0.70
+
+# Max number of separate blobs allowed in a detection region
+# Lower = stricter, rejects scattered motion
+max_num_blobs: 5
+
+# Min ratio of motion pixels to bounding box area
+# Higher = requires more filled bounding box
+min_motion_ratio: 0.15
+
+# -----------------------------------------------------------------------------
+# SHAPE PARAMETERS
+# -----------------------------------------------------------------------------
+# Filter detections by contour geometry
+
+# Min contour area as FRACTION of image area (rejects noise/tiny detections)
+# 0.0002 on a 1080 x 1080 frame ~= 233 px^2
+min_area: 0.0002
+
+# Max contour area as FRACTION of image area (rejects large moving objects)
+# 0.035 on a 1080 x 1080 frame ~= 40,824 px^2
+max_area: 0.095
+
+# Min area/perimeter ratio (rejects thin/elongated shapes)
+# Unitless shape descriptor; not scaled with image size.
+min_density: 3.0
+
+# Min convex hull fill ratio (rejects irregular/fragmented shapes)
+# 1.0 = perfectly convex, lower = more irregular allowed
+min_solidity: 0.55
+
+# -----------------------------------------------------------------------------
+# TRACKING PARAMETERS
+# -----------------------------------------------------------------------------
+# Control how detections are linked into tracks
+
+# Min NET displacement for track confirmation, as FRACTION of image width.
+# Filters stationary false positives.
+# 0.05 on a 1080 px wide frame = 54 px
+min_displacement: 0.05
+
+# Min path points required before topology analysis
+min_path_points: 10
+
+# Max allowed jump between consecutive frames, as FRACTION of image width.
+# Larger = more tolerant of fast movement, but may link separate objects.
+# 0.1 on a 1080 px wide frame = 108 px
+max_frame_jump: 0.2
+
+# How many frames to remember a lost track before deleting
+# Helps re-link tracks after brief occlusions (e.g., 45 frames @ 30fps = 1.5s)
+max_lost_frames: 45
+
+# Max allowed area change ratio between frames
+# Prevents linking very different sized detections
+max_area_change_ratio: 3.0
+
+# -----------------------------------------------------------------------------
+# TRACKER MATCHING PARAMETERS
+# -----------------------------------------------------------------------------
+# Hungarian algorithm cost function weights
+
+# Weight for distance cost (0-1)
+# Higher = position matters more for matching
+tracker_w_dist: 0.6
+
+# Weight for area cost (0-1)
+# Higher = size similarity matters more for matching
+tracker_w_area: 0.4
+
+# Maximum cost for valid track-detection match (0-1)
+# Lower = stricter matching, more new tracks created
+tracker_cost_threshold: 0.3
+
+# -----------------------------------------------------------------------------
+# PATH TOPOLOGY PARAMETERS
+# -----------------------------------------------------------------------------
+# Confirm insect-like movement patterns vs random/stationary motion
+
+# Max ratio of revisited positions (insects explore new areas)
+# Lower = stricter, requires more exploration
+max_revisit_ratio: 0.30
+
+# Min forward progression ratio (insects move purposefully)
+# Higher = stricter, requires more directional movement
+min_progression_ratio: 0.70
+
+# Max directional variance (insects maintain relatively consistent heading)
+# Lower = stricter, requires more consistent direction
+max_directional_variance: 0.90
+
+# Radius for determining if a position is "revisited", as FRACTION of image width.
+# Smaller = stricter definition of revisiting.
+# 0.05 on a 1080 px wide frame = 54 px
+revisit_radius: 0.05

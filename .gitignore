@@ -22,3 +22,8 @@ build/
 .coverage
 htmlcov/
 crops/
+
+# API keys pulled alongside device_configs/ live outside the repo now
+# (~/Development/titus/device_config_secrets/); this is a backstop in case
+# one ever lands here again.
+device_configs/**/*.secret.json

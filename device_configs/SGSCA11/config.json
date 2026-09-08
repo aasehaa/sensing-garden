@@ -1,0 +1,22 @@
+{
+  "api_url": "https://api.sensinggarden.com/v1",
+  "archive_batch": true,
+  "dot_ids": [
+    "FLIK3-dot01",
+    "FLIK3-dot02",
+    "FLIK3-dot03",
+    "FLIK3-dot04",
+    "FLIK3-dot05"
+  ],
+  "flick_id": "FLIK3",
+  "heartbeat_interval": 300,
+  "input_dir": "/home/pi/bugcam/incoming",
+  "output_dir": "/home/pi/bugcam/outputs",
+  "pending_dir": "/home/pi/bugcam/pending",
+  "record_window": "05:00-22:00",
+  "s3_bucket": "scl-sensing-garden",
+  "state_dir": "~/.local/share/bugcam",
+  "timezone": "Europe/Amsterdam",
+  "upload_poll_interval": 3600,
+  "video_sample_interval": 10
+}

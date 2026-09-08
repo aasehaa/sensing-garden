@@ -1,0 +1,54 @@
+# =============================================================================
+# BUGSPOT DETECTION CONFIG  —  4K LANDSCAPE @ 30 fps
+# =============================================================================
+# Default detection parameters for bugcam. Override with --detection-config
+# or create ~/.config/bugcam/detection.yaml for local customization.
+# =============================================================================
+
+# GMM background subtractor
+gmm_history:        500
+gmm_var_threshold:  16
+
+# Morphological filtering (absolute pixels)
+morph_kernel_size:  5
+
+# Detection resolution (speed): explicit [width, height] (px) to run the
+# detector at. Detection runs on resized frames while bounding boxes are scaled
+# back to native res, so crops/composites stay full resolution. null = native.
+# For 4K capture, e.g. [960, 540] detects at 960x540 (~16x fewer pixels).
+detection_resolution:  [1920, 1080]
+
+# Reference resolution: the resolution morph_kernel_size/min_density were tuned
+# for. This config is tuned for 4K, so those two params auto-scale from 4K to
+# whatever resolution detection runs at (native or detection_resolution) — e.g.
+# running on a native 1080p video scales them down automatically, no re-tuning.
+reference_resolution:  [3840, 2160]
+
+# Cohesiveness — filters scattered motion (wind on plants)
+min_largest_blob_ratio: 0.85
+max_num_blobs:          3
+min_motion_ratio:       0.20
+
+# Per-detection size + shape filters
+min_area:           0.00012
+max_area:           0.0015
+min_density:        3.0
+min_solidity:       0.55
+
+# Tracking
+min_displacement:       0.25
+min_path_points:        10
+max_frame_jump:         0.06
+max_lost_frames:        45
+max_area_change_ratio:  3.0
+
+# Tracker matching (Hungarian cost weights)
+tracker_w_dist:         0.6
+tracker_w_area:         0.4
+tracker_cost_threshold: 0.25
+
+# Path topology — insect-like vs plant-like motion
+revisit_radius:           0.025
+max_revisit_ratio:        0.30
+min_progression_ratio:    0.70
+max_directional_variance: 0.85
